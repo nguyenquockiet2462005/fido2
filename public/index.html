@@ -1,1 +1,168 @@
-//File giao diện web
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> FIDO2 / WebAuthn Demo - Kiểm Tra Kết Nối</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --success: #22c55e;
+      --border: #334155;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      color: var(--primary);
+      margin-top: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    p {
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    button {
+      background: var(--primary);
+      color: #0f172a;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    pre {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      color: #38bdf8;
+      max-height: 200px;
+    }
+
+    .footer-note {
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      margin-top: 24px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="card">
+    <div class="status-badge">
+      <span class="status-dot"></span>
+      Server & Session đã sẵn sàng!
+    </div>
+
+    <h1> FIDO2 / WebAuthn Demo</h1>
+    <p>
+      Server Express và cơ chế bảo vệ phiên <strong>Express-Session</strong> cùng <strong>In-Memory Database</strong> đã
+      được khởi tạo thành công.
+    </p>
+
+    <div class="btn-group">
+      <button id="btnHealth">Kiểm tra Server (/api/health)</button>
+      <button id="btnSession">Kiểm tra Session (/api/session-debug)</button>
+    </div>
+
+    <div>
+      <p style="margin-bottom: 6px; font-weight: 500;">Kết quả trả về từ Backend:</p>
+      <pre id="outputLog">// Bấm một trong hai nút phía trên để kiểm tra kết nối API...</pre>
+    </div>
+
+    <div class="footer-note">
+      <strong>Bước tiếp theo:</strong> Thành viên 2 sẽ viết API FIDO2 trong <code>routes/auth.js</code>, Thành viên 3 sẽ
+      gọi WebAuthn API trong <code>public/js/webauthn.js</code>, và Thành viên 4 sẽ thiết kế giao diện đăng nhập/đăng ký
+      tại đây!
+    </div>
+  </div>
+
+  <script>
+    const outputLog = document.getElementById('outputLog');
+
+    async function callApi(endpoint) {
+      outputLog.innerText = `Đang gửi request tới ${endpoint}...`;
+      try {
+        const res = await fetch(endpoint);
+        const data = await res.json();
+        outputLog.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        outputLog.innerText = `Lỗi kết nối: ${err.message}`;
+      }
+    }
+
+    document.getElementById('btnHealth').addEventListener('click', () => callApi('/api/health'));
+    document.getElementById('btnSession').addEventListener('click', () => callApi('/api/session-debug'));
+  </script>
+</body>
+
+</html>
