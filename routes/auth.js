@@ -3,182 +3,337 @@
  */
 
 import express from 'express';
+
+// Lôi các chuyên gia FIDO2 từ thư viện ra
 import {
-  generateRegistrationOptions,
-  verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse
+    generateRegistrationOptions,
+    verifyRegistrationResponse,
+    generateAuthenticationOptions,
+    verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 
-// Import đúng các hàm từ file db.js của bạn
+// Kéo các hàm làm việc với dữ liệu người dùng từ db.js
 import {
-  findUserByUsername,
-  createUser,
-  addCredentialToUser,
-  updateCredentialCounter
+    findUserByUsername,
+    createUser,
+    addCredentialToUser,
+    updateCredentialCounter,
 } from '../db.js';
 
+// Tạo một trạm phân luồng (Router)
 const router = express.Router();
 
-const rpName = 'FIDO2 Demo Team';
+// Cấu hình định danh cho máy chủ
+const rpName = 'FIDO2 Demo';
 const rpID = 'localhost';
-const origin = `http://${rpID}:3000`;
+const origin = 'http://localhost:3000';
 
-// =========================================================================
-// 1. API TRẢ VỀ TÙY CHỌN ĐĂNG KÝ
-// =========================================================================
+
+// ==========================================
+// GIAI ĐOẠN 1: ĐĂNG KÝ (REGISTRATION)
+// ==========================================
+
+// 1. API Tạo Challenge Đăng ký (Ra đề)
 router.post('/register-options', async (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'Thiếu username' });
+    // Khách đến quầy xin đăng ký và đọc tên
+    const { username } = req.body;
 
-  // Dùng hàm findUserByUsername từ db.js
-  let user = findUserByUsername(username);
-  if (!user) {
-    user = createUser(username);
-  }
+    // Kiểm tra người dùng có nhập tên hay chưa
+    if (!username) {
+        return res.status(400).json({
+            error: 'Vui lòng nhập tên người dùng!'
+        });
+    }
 
-  try {
-    const options = await generateRegistrationOptions({
-      rpName,
-      rpID,
-      userID: new Uint8Array(Buffer.from(user.id)),
-      userName: user.username,
-      authenticatorSelection: { residentKey: 'discouraged' },
-      attestationType: 'none',
-    });
+    // Tìm hồ sơ trong cơ sở dữ liệu, nếu chưa có thì tạo mới
+    let user = findUserByUsername(username);
 
-    req.session.currentChallenge = options.challenge;
-    res.json(options);
-  } catch (error) {
-    console.error('Lỗi tạo Registration Options:', error);
-    res.status(500).json({ error: 'Lỗi server khi tạo Challenge' });
-  }
+    if (!user) {
+        user = createUser(username);
+    }
+
+    try {
+        // Gọi chuyên gia ra một bài toán sinh trắc học
+        const options = await generateRegistrationOptions({
+            rpName,
+            rpID,
+
+            // Chuyển chuỗi văn bản (String) sang mảng Byte (Uint8Array)
+            userID: new TextEncoder().encode(user.id),
+
+            userName: user.username,
+
+            attestationType: 'none',
+
+            authenticatorSelection: {
+                residentKey: 'discouraged',
+                // 💡 ĐÃ CHỈNH SỬA Ở ĐÂY: Đổi từ 'preferred' sang 'discouraged' để tránh lỗi bắt buộc quét vân tay/PIN khắt khe
+                userVerification: 'discouraged'
+            },
+        });
+
+        // Lưu "Đề thi gốc" vào túi cá nhân (Session)
+        req.session.currentChallenge = options.challenge;
+
+        // In ra Terminal để nhóm dễ theo dõi quá trình
+        console.log('==========================================');
+        console.log('[ĐĂNG KÝ] Tạo Challenge thành công');
+        console.log('[ĐĂNG KÝ] Username:', username);
+        console.log('[ĐĂNG KÝ] Challenge:', options.challenge);
+        console.log('==========================================');
+
+        // Phát đề thi (chuỗi JSON) về cho trình duyệt
+        res.json(options);
+
+    } catch (error) {
+        console.error("Lỗi khi tạo challenge đăng ký:", error);
+
+        return res.status(500).json({
+            error: 'Lỗi hệ thống khi khởi tạo đăng ký.'
+        });
+    }
 });
 
-// =========================================================================
-// 2. API XÁC MINH CHỮ KÝ ĐĂNG KÝ (Lưu Passkey)
-// =========================================================================
+
+// 2. API Xác thực Đăng ký (Chấm điểm)
 router.post('/register-verify', async (req, res) => {
-  const { username, response } = req.body;
-  const expectedChallenge = req.session.currentChallenge;
-  const user = findUserByUsername(username);
+    // Thu "lời giải" từ trình duyệt gửi lên
+    const { username, response } = req.body;
 
-  if (!user || !expectedChallenge) {
-    return res.status(400).json({ error: 'Session hết hạn hoặc không tìm thấy User' });
-  }
+    console.log('==========================================');
+    console.log('[ĐĂNG KÝ] Bắt đầu xác thực');
+    console.log('[ĐĂNG KÝ] Username:', username);
+    console.log('[ĐĂNG KÝ] Credential ID:', response?.id);
+    console.log('==========================================');
 
-  try {
-    const verification = await verifyRegistrationResponse({
-      response,
-      expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-    });
+    // Tìm người dùng trong cơ sở dữ liệu
+    const user = findUserByUsername(username);
 
-    if (verification.verified) {
-      const { credential } = verification.registrationInfo;
-
-      // Tạo gói thông tin chìa khóa khớp với định nghĩa trong db.js
-      const credentialInfo = {
-        id: credential.id,
-        publicKey: credential.publicKey,
-        counter: credential.counter,
-        transports: credential.transports,
-      };
-
-      // Gọi hàm addCredentialToUser từ db.js
-      addCredentialToUser(username, credentialInfo);
-
-      req.session.currentChallenge = undefined;
-      res.json({ verified: true });
-    } else {
-      res.status(400).json({ verified: false, error: 'Chữ ký không hợp lệ' });
+    if (!user) {
+        return res.status(404).json({
+            error: 'Tài khoản không tồn tại!'
+        });
     }
-  } catch (error) {
-    console.error('Lỗi xác minh Đăng ký:', error);
-    res.status(400).json({ verified: false, error: error.message });
-  }
+
+    // Lấy lại Đề thi gốc từ trong túi cá nhân (Session) ra để đối chiếu
+    const expectedChallenge = req.session.currentChallenge;
+
+    if (!expectedChallenge) {
+        return res.status(400).json({
+            error: 'Không tìm thấy bài thi gốc. Vui lòng thử lại!'
+        });
+    }
+
+    try {
+        // Nhờ chuyên gia chấm điểm xem lời giải có khớp không
+        const verification = await verifyRegistrationResponse({
+            response,
+            expectedChallenge,
+            expectedOrigin: origin,
+            expectedRPID: rpID,
+        });
+
+        console.log('[ĐĂNG KÝ] Kết quả xác thực:', verification.verified);
+
+        if (!verification.verified) {
+            return res.status(400).json({
+                verified: false,
+                error: 'Xác thực Passkey không thành công!'
+            });
+        }
+
+        const { registrationInfo } = verification;
+        const credential = registrationInfo.credential;
+
+        if (!credential) {
+            return res.status(400).json({
+                verified: false,
+                error: 'Không lấy được thông tin Passkey từ thiết bị!'
+            });
+        }
+
+        addCredentialToUser(username, {
+            id: credential.id,
+            publicKey: credential.publicKey,
+            counter: credential.counter,
+            transports: credential.transports || [],
+        });
+
+        console.log('==========================================');
+        console.log('[ĐĂNG KÝ] Lưu Passkey thành công!');
+        console.log('[ĐĂNG KÝ] Credential ID:', credential.id);
+        console.log('==========================================');
+
+        req.session.currentChallenge = null;
+
+        return res.json({
+            verified: true,
+            message: 'Đăng ký sinh trắc học thành công!'
+        });
+
+    } catch (error) {
+        console.error('==========================================');
+        console.error('[ĐĂNG KÝ] LỖI XÁC THỰC');
+        console.error(error);
+        console.error('==========================================');
+
+        return res.status(400).json({
+            verified: false,
+            error: error.message
+        });
+    }
 });
 
-// =========================================================================
-// 3. API TRẢ VỀ TÙY CHỌN ĐĂNG NHẬP
-// =========================================================================
+
+// ==========================================
+// GIAI ĐOẠN 2: ĐĂNG NHẬP (AUTHENTICATION)
+// ==========================================
+
+// 3. API Tạo Challenge Đăng nhập (Ra đề thi)
 router.post('/login-options', async (req, res) => {
-  const { username } = req.body;
-  const user = findUserByUsername(username);
+    const { username } = req.body;
 
-  // Kiểm tra biến credentials theo cấu trúc db.js
-  if (!user || !user.credentials || user.credentials.length === 0) {
-    return res.status(404).json({ error: 'Tài khoản chưa đăng ký thiết bị FIDO2 nào' });
-  }
+    const user = findUserByUsername(username);
 
-  try {
-    const options = await generateAuthenticationOptions({
-      rpID,
-      allowCredentials: user.credentials.map(dev => ({
-        id: dev.id,
-        type: 'public-key',
-        transports: dev.transports,
-      })),
-      userVerification: 'preferred',
-    });
+    if (!user) {
+        return res.status(404).json({
+            error: 'Tài khoản không tồn tại!'
+        });
+    }
 
-    req.session.currentChallenge = options.challenge;
-    res.json(options);
-  } catch (error) {
-    console.error('Lỗi tạo Authentication Options:', error);
-    res.status(500).json({ error: 'Lỗi server khi tạo Challenge đăng nhập' });
-  }
+    const userCredentials = user.credentials || [];
+
+    if (userCredentials.length === 0) {
+        return res.status(400).json({
+            error: 'Tài khoản này chưa cài đặt sinh trắc học!'
+        });
+    }
+
+    try {
+        const options = await generateAuthenticationOptions({
+            rpID,
+            allowCredentials: userCredentials.map(dev => ({
+                id: dev.id,
+                type: 'public-key',
+                transports: dev.transports || [],
+            })),
+            userVerification: 'discouraged', // Cấu hình linh hoạt đồng bộ với đăng ký
+        });
+
+        req.session.currentChallenge = options.challenge;
+
+        console.log('==========================================');
+        console.log('[ĐĂNG NHẬP] Tạo Challenge thành công');
+        console.log('[ĐĂNG NHẬP] Username:', username);
+        console.log('[ĐĂNG NHẬP] Challenge:', options.challenge);
+        console.log('==========================================');
+
+        res.json(options);
+
+    } catch (error) {
+        console.error("Lỗi khi tạo challenge đăng nhập:", error);
+
+        return res.status(500).json({
+            error: 'Lỗi hệ thống khi khởi tạo đăng nhập.'
+        });
+    }
 });
 
-// =========================================================================
-// 4. API XÁC MINH CHỮ KÝ ĐĂNG NHẬP
-// =========================================================================
+
+// 4. API Xác thực Đăng nhập (Chấm điểm)
 router.post('/login-verify', async (req, res) => {
-  const { username, response } = req.body;
-  const expectedChallenge = req.session.currentChallenge;
-  const user = findUserByUsername(username);
+    const { username, response } = req.body;
 
-  if (!user || !expectedChallenge) {
-    return res.status(400).json({ error: 'Session hết hạn hoặc mất kết nối' });
-  }
+    console.log('==========================================');
+    console.log('[ĐĂNG NHẬP] Bắt đầu xác thực');
+    console.log('[ĐĂNG NHẬP] Username:', username);
+    console.log('[ĐĂNG NHẬP] Credential ID:', response?.id);
+    console.log('==========================================');
 
-  // Trích xuất đúng chiếc chìa khóa đang được dùng để đăng nhập
-  const device = user.credentials.find(c => c.id === response.id);
-  if (!device) {
-    return res.status(400).json({ error: 'Thiết bị này chưa được đăng ký' });
-  }
+    const user = findUserByUsername(username);
 
-  try {
-    const verification = await verifyAuthenticationResponse({
-      response,
-      expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-      credential: {
-        id: device.id,
-        publicKey: device.publicKey,
-        counter: device.counter,
-        transports: device.transports,
-      },
-    });
-
-    if (verification.verified) {
-      // Cập nhật counter bằng hàm updateCredentialCounter trong db.js
-      updateCredentialCounter(username, device.id, verification.authenticationInfo.newCounter);
-
-      req.session.currentChallenge = undefined;
-      req.session.loggedIn = true;
-      req.session.username = username;
-
-      res.json({ verified: true });
-    } else {
-      res.status(400).json({ verified: false, error: 'Xác minh vân tay/khuôn mặt thất bại' });
+    if (!user) {
+        return res.status(404).json({
+            error: 'Tài khoản không tồn tại!'
+        });
     }
-  } catch (error) {
-    console.error('Lỗi xác minh Đăng nhập:', error);
-    res.status(400).json({ verified: false, error: error.message });
-  }
+
+    const expectedChallenge = req.session.currentChallenge;
+
+    if (!expectedChallenge) {
+        return res.status(400).json({
+            error: 'Phiên đăng nhập hết hạn. Vui lòng làm lại!'
+        });
+    }
+
+    const userCredentials = user.credentials || [];
+
+    const currentDevice = userCredentials.find(
+        device => device.id === response.id
+    );
+
+    if (!currentDevice) {
+        return res.status(400).json({
+            error: 'Thiết bị này chưa được đăng ký vân tay/FaceID!'
+        });
+    }
+
+    try {
+        const verification = await verifyAuthenticationResponse({
+            response,
+            expectedChallenge,
+            expectedOrigin: origin,
+            expectedRPID: rpID,
+            credential: {
+                id: currentDevice.id,
+                publicKey: currentDevice.publicKey,
+                counter: currentDevice.counter,
+                transports: currentDevice.transports || [],
+            },
+        });
+
+        console.log('[ĐĂNG NHẬP] Kết quả xác thực:', verification.verified);
+
+        if (!verification.verified) {
+            return res.status(400).json({
+                verified: false,
+                error: 'Xác thực đăng nhập thất bại!'
+            });
+        }
+
+        const { authenticationInfo } = verification;
+
+        updateCredentialCounter(
+            username,
+            currentDevice.id,
+            authenticationInfo.newCounter
+        );
+
+        req.session.currentChallenge = null;
+        req.session.loggedIn = true;
+        req.session.username = user.username;
+
+        console.log('==========================================');
+        console.log('[ĐĂNG NHẬP] Đăng nhập thành công!');
+        console.log('[ĐĂNG NHẬP] User:', user.username);
+        console.log('==========================================');
+
+        return res.json({
+            verified: true,
+            message: 'Đăng nhập thành công! Chào mừng trở lại.'
+        });
+
+    } catch (error) {
+        console.error('==========================================');
+        console.error('[ĐĂNG NHẬP] LỖI XÁC THỰC');
+        console.error(error);
+        console.error('==========================================');
+
+        return res.status(400).json({
+            verified: false,
+            error: error.message
+        });
+    }
 });
 
 export default router;
