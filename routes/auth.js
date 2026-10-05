@@ -97,8 +97,8 @@ router.post('/register-verify', async (req, res) => {
         if (verification.verified) {
             const { registrationInfo } = verification;
 
-            // Lưu bản đồ vân tay/FaceID vào cơ sở dữ liệu
-            addCredentialToUser(user.id, registrationInfo);
+            // Dùng hàm của sếp để cất chìa khóa vào mảng 'credentials' đúng chuẩn trong db.js
+            addCredentialToUser(username, registrationInfo);
 
             // Xóa Đề thi trong túi Session đi để chống Replay Attack (dùng lại mã cũ)
             req.session.currentChallenge = null;
@@ -127,9 +127,9 @@ router.post('/login-options', async (req, res) => {
         return res.status(404).json({ error: 'Tài khoản không tồn tại!' });
     }
 
-    // Mở cơ sở dữ liệu xem khách này đã cài FaceID/Vân tay nào chưa
-    const userDevices = user.devices || [];
-    if (userDevices.length === 0) {
+    // Lấy danh sách khóa từ mảng `credentials` chuẩn của file db.js do sếp viết
+    const userCredentials = user.credentials || [];
+    if (userCredentials.length === 0) {
         return res.status(400).json({ error: 'Tài khoản này chưa cài đặt sinh trắc học!' });
     }
 
@@ -137,8 +137,8 @@ router.post('/login-options', async (req, res) => {
         // Gọi chuyên gia ra đề thi dành riêng cho Đăng nhập
         const options = await generateAuthenticationOptions({
             rpID,
-            // Ép điện thoại chỉ được dùng đúng cái vân tay đã đăng ký hôm trước
-            allowCredentials: userDevices.map(dev => ({
+            // Ép điện thoại chỉ được dùng đúng cái vân tay đã đăng ký trong mảng credentials
+            allowCredentials: userCredentials.map(dev => ({
                 id: dev.credentialID,
                 type: 'public-key',
             })),
@@ -174,12 +174,12 @@ router.post('/login-verify', async (req, res) => {
         return res.status(400).json({ error: 'Phiên đăng nhập hết hạn. Vui lòng làm lại!' });
     }
 
-    // Lấy danh sách vân tay cũ trong cơ sở dữ liệu ra
-    const userDevices = user.devices || [];
+    // Lấy danh sách khóa từ mảng `credentials` trong db.js
+    const userCredentials = user.credentials || [];
 
     // BƯỚC 3: KIỂM TRA MÃ THIẾT BỊ (Vòng ngoài)
-    // Xem cái điện thoại khách đang cầm có đúng là đồ chính chủ không?
-    const currentDevice = userDevices.find(device => device.credentialID === response.id);
+    // Xem ID chiếc chìa khóa khách đang cầm có khớp với cái đã lưu trong mảng credentials không?
+    const currentDevice = userCredentials.find(device => device.credentialID === response.id);
 
     if (!currentDevice) {
         return res.status(400).json({ error: 'Thiết bị này chưa được đăng ký vân tay/FaceID!' });
@@ -199,8 +199,8 @@ router.post('/login-verify', async (req, res) => {
         if (verification.verified) {
             const { authenticationInfo } = verification;
 
-            // Cập nhật số đếm bảo mật (Counter) để chống copy chìa khóa
-            updateCredentialCounter(currentDevice.credentialID, authenticationInfo.newCounter);
+            // Cập nhật số đếm bảo mật (Counter) thông qua hàm của sếp trong db.js
+            updateCredentialCounter(username, currentDevice.credentialID, authenticationInfo.newCounter);
 
             // Xóa Đề thi cũ
             req.session.currentChallenge = null;
