@@ -1,259 +1,220 @@
+# Demo Xác Thực Không Mật Khẩu FIDO2 / WebAuthn (Passkeys)
 
-# Demo FIDO2 / WebAuthn (Passkeys) - Môn Bảo Mật Thông Tin
+Đồ án môn **Bảo Mật Thông Tin**, Viet-Japan Institute of Technology (HUTECH).
 
-> Dự án nghiên cứu và hiện thực cơ chế xác thực không dùng mật khẩu (**Passwordless Authentication**) dựa trên chuẩn **FIDO2 / WebAuthn**, giúp bảo vệ người dùng trước các cuộc tấn công lừa đảo (Phishing), tấn công giả mạo (Man-in-the-Middle) và rò rỉ dữ liệu xác thực.
-
----
-Hướng dẫn file:
-- routes/auth.js - a Khoa (Backend FIDO2)
-- public/js/webauthn.js - Huy (Frontend FIDO2)
-- public/js/ui.js - Đạt (Frontend UI Controller)
-- public/css/style.css - Đạt (Frontend Style)
-
-
-> 📘 **Tài liệu tham khảo chi tiết nội bộ:** Xem [Sổ Tay Trưởng Nhóm (LEADER_GUIDE.md)](LEADER_GUIDE.md) để nắm rõ quy trình Git không conflict, chiến lược học cùng AI và lộ trình 4 Sprint.
+Dự án hiện thực một ứng dụng web cho phép người dùng đăng ký và đăng nhập bằng Passkey (Touch ID, Face ID, Windows Hello, YubiKey) thay cho mật khẩu. Server chỉ lưu khóa công khai, nên rò rỉ cơ sở dữ liệu không làm lộ thông tin đăng nhập, và trình duyệt gắn tên miền thật vào mỗi chữ ký nên trang giả mạo không thể lấy được phiên xác thực.
 
 ---
 
-## 🛠️ Công Nghệ Sử Dụng
+## Mục lục
 
-* **Backend**: Node.js, Express.js, Express-Session
-* **FIDO2 Server**: `@simplewebauthn/server` (Tạo challenge, xác minh PublicKeyCredential)
-* **FIDO2 Client**: `@simplewebauthn/browser` (Tương tác với WebAuthn API trên trình duyệt & thiết bị xác thực như TouchID, Windows Hello, YubiKey)
-* **Frontend**: HTML5, CSS3, Vanilla JavaScript
+1. [Mục tiêu](#1-mục-tiêu)
+2. [Cơ chế bảo mật](#2-cơ-chế-bảo-mật)
+3. [Kiến trúc và luồng xác thực](#3-kiến-trúc-và-luồng-xác-thực)
+4. [Công nghệ sử dụng](#4-công-nghệ-sử-dụng)
+5. [Cấu trúc thư mục](#5-cấu-trúc-thư-mục)
+6. [Cài đặt và chạy](#6-cài-đặt-và-chạy)
+7. [Kịch bản demo](#7-kịch-bản-demo)
+8. [Phân công thành viên](#8-phân-công-thành-viên)
+9. [Quy trình làm việc với Git](#9-quy-trình-làm-việc-với-git)
+10. [Giới hạn của bản demo](#10-giới-hạn-của-bản-demo)
+11. [Tài liệu tham khảo](#11-tài-liệu-tham-khảo)
 
 ---
 
-## 🚀 Hướng Dẫn Cài Đặt & Chạy Dự Án (Dành cho thành viên mới)
+## 1. Mục tiêu
 
-### 1. Tải mã nguồn về máy
-Mở Terminal (macOS/Linux) hoặc Git Bash (Windows) và chạy:
+- Tìm hiểu chuẩn FIDO2, gồm giao thức WebAuthn (W3C) và CTAP2 (FIDO Alliance).
+- Xây dựng demo hoàn chỉnh hai luồng: đăng ký Passkey và đăng nhập bằng Passkey.
+- Chứng minh bằng thực nghiệm ba tính chất: chống phishing, chống tấn công phát lại, và không lưu bí mật trên server.
+
+## 2. Cơ chế bảo mật
+
+| Mối đe dọa | Cách FIDO2 xử lý | Vị trí trong mã nguồn |
+| :--- | :--- | :--- |
+| Phishing, giả mạo trang web | Trình duyệt ghi `origin` thật vào `clientDataJSON`. Authenticator chỉ ký cho đúng `rpID`. Server so khớp `expectedOrigin` và `expectedRPID`. | `routes/auth.js` |
+| Tấn công phát lại (replay) | Mỗi phiên dùng một `challenge` ngẫu nhiên, dùng một lần. Gói tin ghi lại không còn hợp lệ ở lần gửi thứ hai. | `routes/auth.js` |
+| Nhân bản thiết bị xác thực | Bộ đếm `counter` tăng sau mỗi lần ký. Server từ chối khi giá trị nhận được nhỏ hơn hoặc bằng giá trị đã lưu. | `routes/auth.js`, `db.js` |
+| Rò rỉ cơ sở dữ liệu | Server chỉ lưu `credentialID`, `publicKey` và `counter`. Không có mật khẩu hay khóa bí mật. | `db.js` |
+| Đánh cắp khóa bí mật | Khóa bí mật được sinh và giữ trong phần cứng (Secure Enclave, TPM, YubiKey) và không bao giờ gửi qua mạng. | Authenticator |
+
+## 3. Kiến trúc và luồng xác thực
+
+Hệ thống có ba thành phần:
+
+- **Authenticator:** thiết bị giữ khóa bí mật và ký challenge (Touch ID, Windows Hello, YubiKey).
+- **Client:** trình duyệt chạy `@simplewebauthn/browser` và gọi WebAuthn API.
+- **Relying Party (RP):** server Node.js sinh challenge và xác minh chữ ký.
+
+### Luồng đăng ký
+
+```mermaid
+sequenceDiagram
+    participant U as Người dùng
+    participant B as Trình duyệt
+    participant S as Server (RP)
+    participant A as Authenticator
+
+    U->>B: Nhập username, chọn Đăng ký
+    B->>S: Yêu cầu registration options
+    S-->>B: challenge, rpID, thông tin user
+    B->>A: navigator.credentials.create()
+    A->>U: Yêu cầu vân tay / khuôn mặt / PIN
+    U-->>A: Xác nhận
+    A-->>B: Cặp khóa mới, attestation, publicKey
+    B->>S: Gửi kết quả đăng ký
+    S->>S: Xác minh challenge, origin, rpID
+    S->>S: Lưu credentialID, publicKey, counter
+    S-->>B: Đăng ký thành công
+```
+
+### Luồng đăng nhập
+
+```mermaid
+sequenceDiagram
+    participant U as Người dùng
+    participant B as Trình duyệt
+    participant S as Server (RP)
+    participant A as Authenticator
+
+    U->>B: Nhập username, chọn Đăng nhập
+    B->>S: Yêu cầu authentication options
+    S-->>B: challenge, danh sách credentialID
+    B->>A: navigator.credentials.get()
+    A->>U: Yêu cầu vân tay / khuôn mặt / PIN
+    U-->>A: Xác nhận
+    A-->>B: Chữ ký trên challenge, counter
+    B->>S: Gửi assertion
+    S->>S: Dùng publicKey kiểm tra chữ ký, origin, counter
+    S-->>B: Đăng nhập thành công, tạo session
+```
+
+## 4. Công nghệ sử dụng
+
+| Lớp | Công nghệ | Phiên bản |
+| :--- | :--- | :--- |
+| Runtime | Node.js (ES Modules) | 18 trở lên |
+| Web server | Express | 5.2.1 |
+| Phiên làm việc | express-session | 1.19.0 |
+| FIDO2 phía server | `@simplewebauthn/server` | 14.0.3 |
+| FIDO2 phía client | `@simplewebauthn/browser` | 14.0.0 |
+| Giao diện | HTML5, CSS3, JavaScript thuần | - |
+
+## 5. Cấu trúc thư mục
+
+```text
+fido2/
+├── server.js              # Khởi tạo Express, session, phục vụ thư mục public
+├── db.js                  # Lưu trữ user và credential
+├── routes/
+│   └── auth.js            # API đăng ký và đăng nhập FIDO2
+├── public/
+│   ├── index.html         # Cấu trúc trang
+│   ├── css/
+│   │   └── style.css      # Giao diện
+│   └── js/
+│       ├── webauthn.js    # Gọi WebAuthn API và các endpoint backend
+│       └── ui.js          # Xử lý sự kiện, loading, thông báo
+├── LEADER_GUIDE.md        # Sổ tay nhóm: quy trình Git và lộ trình sprint
+├── package.json
+└── README.md
+```
+
+Mỗi thành viên sửa file riêng, nhờ đó khi gộp Pull Request không phát sinh conflict.
+
+### API backend
+
+| Phương thức | Endpoint | Chức năng |
+| :--- | :--- | :--- |
+| GET | `/api/auth/register-options` | Sinh challenge và tùy chọn đăng ký |
+| POST | `/api/auth/register-verify` | Xác minh phản hồi đăng ký, lưu credential |
+| GET | `/api/auth/login-options` | Sinh challenge và tùy chọn đăng nhập |
+| POST | `/api/auth/login-verify` | Xác minh chữ ký, cập nhật counter, tạo session |
+
+## 6. Cài đặt và chạy
+
+**Yêu cầu**
+
+- Node.js 18 trở lên và Git.
+- Trình duyệt hỗ trợ WebAuthn (Chrome, Edge, Safari, Firefox).
+- Thiết bị có cảm biến sinh trắc học, Windows Hello, hoặc khóa bảo mật FIDO2.
+
+**Các bước**
+
 ```bash
 git clone https://github.com/nguyenquockiet2462005/fido2.git
 cd fido2
-```
-
-### 2. Cài đặt các thư viện cần thiết
-```bash
 npm install
-```
-
-### 3. Khởi động Server
-```bash
 npm start
 ```
-Mở trình duyệt và truy cập: `http://localhost:3000` (hoặc cổng mà server thông báo).
 
----
+Mở trình duyệt tại `http://localhost:3000` (hoặc cổng server in ra ở terminal).
 
-## 🌳 Quy Trình Làm Việc Nhóm Với Git & GitHub (Git Flow)
+WebAuthn chỉ hoạt động trên `localhost` hoặc HTTPS. Truy cập bằng địa chỉ IP qua HTTP sẽ bị trình duyệt chặn.
 
-> [!IMPORTANT]
-> **Quy tắc vàng:** Không ai code và đẩy (`push`) trực tiếp lên nhánh `main`. Nhánh `main` là nhánh sản phẩm ổn định dùng để chấm điểm/báo cáo. Mỗi người cần tạo **nhánh riêng** khi làm tính năng, sau đó tạo **Pull Request (PR)** trên web GitHub để cả nhóm cùng kiểm tra rồi mới gộp vào `main`.
+## 7. Kịch bản demo
 
-### Chu trình 5 bước làm việc mỗi ngày:
+**Kịch bản 1: Luồng chuẩn**
+Nhập username, bấm Đăng ký, xác nhận bằng vân tay hoặc PIN, sau đó đăng nhập bằng Passkey vừa tạo.
 
-1. **Luôn kéo code mới nhất từ `main` về máy trước khi bắt đầu:**
-   ```bash
-   git checkout main
-   git pull origin main
-   ```
+**Kịch bản 2: Kiểm tra dữ liệu server**
+Mở `db.js` hoặc in nội dung lưu trữ ra console. Dữ liệu chỉ gồm `credentialID`, `publicKey` và `counter`, không có mật khẩu hay hash.
 
-2. **Tạo nhánh riêng cho công việc của mình:**
-   ```bash
-   # Ví dụ: bạn làm giao diện người dùng
-   git checkout -b feature/frontend-ui
+**Kịch bản 3: Tấn công phát lại**
+Dùng DevTools (tab Network) sao chép request `login-verify` đã thành công, rồi gửi lại. Server từ chối vì challenge đã được dùng.
 
-   # Hoặc bạn làm API xử lý FIDO2 backend
-   git checkout -b feature/backend-auth
-   ```
+**Kịch bản 4: Sai nguồn gốc (origin)**
+Chạy bản sao của ứng dụng trên một origin khác với `expectedOrigin` và thử đăng nhập. Phần xác minh origin thất bại, minh họa cơ chế chống phishing.
 
-3. **Code và lưu lại lịch sử (Commit):**
-   ```bash
-   # Kiểm tra các file bạn vừa chỉnh sửa
-   git status
+## 8. Phân công thành viên
 
-   # Thêm toàn bộ file đã sửa vào danh sách lưu
-   git add .
+| Họ và tên | MSSV | Vai trò | File phụ trách |
+| :--- | :--- | :--- | :--- |
+| Quốc Kiệt | (điền MSSV) | Nhóm trưởng, Tech Lead | `server.js`, `db.js`, review Pull Request, báo cáo |
+| Khoa | (điền MSSV) | Backend FIDO2 | `routes/auth.js` |
+| Huy | (điền MSSV) | Frontend FIDO2 | `public/js/webauthn.js` |
+| Đạt | (điền MSSV) | Frontend UI | `public/index.html`, `public/css/style.css`, `public/js/ui.js` |
 
-   # Lưu commit với thông điệp rõ ràng
-   git commit -m "feat: mo ta ngan gon viec ban vua lam"
-   ```
+`ui.js` gọi hai hàm do `webauthn.js` cung cấp: `registerPasskey(username)` và `loginPasskey(username)`. Hai file này tách biệt nên hai thành viên làm song song được.
 
-4. **Đẩy nhánh của mình lên GitHub:**
-   ```bash
-   git push origin <ten-nhanh-cua-ban>
-   # Ví dụ: git push origin feature/frontend-ui
-   ```
+## 9. Quy trình làm việc với Git
 
-5. **Tạo Pull Request (PR) trên web GitHub:**
-   * Mở link repo: [https://github.com/nguyenquockiet2462005/fido2](https://github.com/nguyenquockiet2462005/fido2)
-   * Bấm vào nút vàng **Compare & pull request** xuất hiện trên trang.
-   * Ghi chú những nội dung bạn đã làm, sau đó bấm **Create pull request**.
-   * Nhóm trưởng hoặc thành viên khác vào review và bấm **Merge pull request** để gộp vào `main`.
+Nhánh `main` là bản ổn định dùng để chấm điểm và báo cáo. Không ai push trực tiếp lên `main`.
 
----
-
-## 📖 Bảng Tra Cứu Câu Lệnh Git Nhanh (Cheat-Sheet)
-
-| Lệnh | Ý nghĩa |
-| :--- | :--- |
-| `git status` | Kiểm tra trạng thái hiện tại (file nào vừa sửa, file nào chưa lưu). |
-| `git pull origin main` | Tải toàn bộ cập nhật mới nhất từ `main` trên GitHub về máy. |
-| `git checkout -b <tên-nhánh>` | Tạo một nhánh mới và chuyển ngay sang nhánh đó. |
-| `git checkout <tên-nhánh>` | Chuyển đổi qua lại giữa các nhánh. |
-| `git branch` | Liệt kê danh sách các nhánh hiện có trên máy. |
-| `git add .` | Chuẩn bị lưu tất cả các file vừa chỉnh sửa. |
-| `git commit -m "mô tả"` | Lưu lại kèm ghi chú nội dung đã thay đổi. |
-| `git push origin <tên-nhánh>` | Đẩy nhánh của mình lên GitHub. |
-| `git log --oneline` | Xem lịch sử các lần commit rút gọn. |
-
----
-
-## ⚠️ Lưu Ý An Toàn & Bảo Mật Dành Cho Nhóm
-
-* **Không đẩy `node_modules` lên Git**: Thư mục này rất nặng và đã được đưa vào file `.gitignore`. Mỗi thành viên tải code về chỉ cần chạy lệnh `npm install`.
-* **Không đưa thông tin nhạy cảm lên Git**: Tuyệt đối không commit các file chứa mật khẩu, private key, token bí mật hoặc file `.env` lên kho mã nguồn công khai.
-
-
-
-
-PHẦN 1: Hiện tại dự án của bạn đã có những gì?
-Sau khi kiểm tra toàn bộ mã nguồn trong thư mục:
-
-Về cấu hình dự án (package.json):
-Đã cấu hình chạy ES Module ("type": "module").
-Đã cài đặt đầy đủ các thư viện chuẩn cho FIDO2/WebAuthn:
-@simplewebauthn/server (v14.0.3): Thư viện chuyên dụng tạo và xác minh challenge ở phía Server.
-@simplewebauthn/browser (v14.0.0): Thư viện giúp Frontend tương tác với TouchID, Windows Hello, FaceID, YubiKey trên trình duyệt.
-express (v5.2.1) & express-session (v1.19.0): Web server và cơ chế lưu phiên (session).
-Về mã nguồn (Codebase):
-
-
-server.js
-: Chưa có code (mới có 1 dòng comment).
-
-
-public/index.html
-: Chưa có code (mới có 1 dòng comment).
-
-
-README.md
-: Đã có khung tài liệu giới thiệu rất chuẩn và các lệnh Git cơ bản. (Tuy nhiên bảng thành viên mới để mẫu 3 người, trong khi nhóm có 4 người).
-Về Git & GitHub:
-Repository đã liên kết với remote https://github.com/nguyenquockiet2462005/fido2.git.
-Các bạn đã thử tạo branch và pull request thành công (feature/member-kiet, feature/dat), chứng tỏ các bạn đã biết sơ qua thao tác cơ bản!
-Tóm lại: Dự án hiện tại đang ở vạch xuất phát hoàn hảo để các bạn thiết lập lại cấu trúc chuẩn, chia việc cho 4 người mà không bị dẫm chân lên nhau.
-
-PHẦN 2: Nguyên nhân hay bị "conflict Git" và cách giải quyết cho nhóm 4 người
-Người mới dùng Git thường rất sợ bị Merge Conflict (xung đột mã nguồn). Xung đột chỉ xảy ra khi 2 người cùng sửa vào cùng 1 file trên cùng một dòng.
-
-Giải pháp vàng: Chia tách kiến trúc file độc lập ngay từ đầu! Chúng ta sẽ chia dự án thành các file riêng biệt:
-
-text
-fido2-datphit2lo/
-├── server.js              <-- Người 1 (Trưởng nhóm): Khởi động app, cấu hình session, database tạm
-├── routes/
-│   └── auth.js            <-- Người 2 (Backend FIDO2): Các API tạo challenge và verify chữ ký
-└── public/
-    ├── index.html         <-- Người 4 (Frontend UI/UX): Cấu trúc giao diện
-    ├── css/
-    │   └── style.css      <-- Người 4 (Frontend UI/UX): Trang trí giao diện & hiệu ứng
-    └── js/
-        ├── ui.js          <-- Người 4: Hiển thị thông báo, chuyển tab Đăng ký / Đăng nhập
-        └── webauthn.js    <-- Người 3 (Frontend FIDO2): Gọi API và kích hoạt vân tay/TouchID
-Khi mỗi thành viên làm việc trên file riêng của mình, việc ghép code (Merge Pull Request) trên GitHub sẽ tự động thành công 100% mà không bao giờ bị conflict.
-
-PHẦN 3: Bảng phân chia công việc cho 4 thành viên
-Thành viên	Vai trò	Trách nhiệm chính	File phụ trách
-Bạn (Người 1)	Tech Lead & Backend Core	- Dựng khung Express server, cấu hình session, mock in-memory DB.
-- Quản lý GitHub, duyệt Pull Request của 3 bạn.
-- Ghép nối và kiểm thử toàn hệ sinh thái.	server.js
-db.js (hoặc biến lưu tạm user)
-Thành viên 2	Backend FIDO2 Specialist	- Viết 4 API cốt lõi với @simplewebauthn/server:
-1. Tạo Registration Options (Challenge)
-2. Xác minh Registration Response
-3. Tạo Authentication Options
-4. Xác minh Authentication Response	routes/auth.js
-Thành viên 3	Frontend FIDO2 Specialist	- Tích hợp @simplewebauthn/browser.
-- Viết hàm gọi API backend lấy Challenge.
-- Kích hoạt trình duyệt mở TouchID / Windows Hello.
-- Gửi kết quả chữ ký ngược lại cho Server.	public/js/webauthn.js
-Thành viên 4	Frontend UI/UX & Live Visualizer	- Thiết kế giao diện hiện đại (Form đăng ký, đăng nhập, Dashboard).
-- Đặc biệt: Làm hộp Live Security Inspector (Console) trên web để khi bấm xác thực, màn hình hiển thị từng bước Challenge-Response đang diễn ra (điểm cộng cực lớn khi báo cáo).
-- Soạn kịch bản demo và slide thuyết trình.	public/index.html
-public/css/style.css
-public/js/ui.js
-PHẦN 4: Chiến lược "Học & Code cùng AI để THẬT SỰ HIỂU"
-Đừng bao giờ prompt: "Viết cho tôi toàn bộ dự án FIDO2". Kết quả sẽ là 500 dòng code lạ lẫm, các bạn copy vào chạy được nhưng lúc thầy cô hỏi 1 câu là "đứng hình".
-
-Hãy hướng dẫn 3 bạn còn lại học theo 3 nguyên tắc sau:
-
-Quy tắc "Hỏi nguyên lý trước - Xin code sau":
-Ví dụ hỏi AI: "FIDO2 Registration Challenge là gì? Tại sao Server phải tạo Challenge ngẫu nhiên mà không để Client tự tạo?" (Để chống tấn công Replay Attack).
-Quy tắc "Bắt AI chú thích chi tiết từng dòng":
-Ví dụ hỏi AI: "Hãy viết giúp tôi hàm generateRegistrationOptions của @simplewebauthn/server và giải thích chi tiết ý nghĩa của các tham số rpName, rpID, userID, challenge bằng tiếng Việt."
-Quy tắc "Vấn đáp trước khi Merge Code" (Trách nhiệm của bạn - Nhóm trưởng):
-Khi một bạn tạo Pull Request, bạn hãy hỏi bạn đó 2 câu hỏi ngắn về đoạn code bạn ấy vừa đẩy lên:
-Ví dụ hỏi Người 2: "Hàm verifyRegistrationResponse cần những tham số gì để xác thực được người dùng?"
-Ví dụ hỏi Người 3: "Hàm startRegistration của trình duyệt trả về đối tượng gì?"
-Nếu bạn ấy trả lời được, bạn mới bấm Merge. Đây là cách giúp cả 4 người cùng tiến bộ cực kỳ nhanh.
-PHẦN 5: Quy trình Git & GitHub chuẩn cho nhóm (Từng bước thao tác)
-Hãy copy đoạn này gửi vào nhóm Zalo/Discord của nhóm bạn:
-
-bash
-# BƯỚC 1: Luôn cập nhật code mới nhất từ main trước khi làm
+```bash
+# 1. Cập nhật main
 git checkout main
 git pull origin main
-# BƯỚC 2: Tạo nhánh riêng theo đúng tên việc của mình (chỉ tạo 1 lần)
-# Người 2:
-git checkout -b feature/backend-fido2
-# Người 3:
-git checkout -b feature/frontend-fido2
-# Người 4:
-git checkout -b feature/frontend-ui
-# BƯỚC 3: Làm việc trên các file của mình, sau đó lưu lại
-git status              # Kiểm tra xem mình đã sửa file nào
-git add .               # Chuẩn bị lưu
-git commit -m "feat: mo ta ngan gon viec da lam"
-# BƯỚC 4: Đẩy nhánh lên GitHub
-git push origin <ten-nhanh-cua-ban>
-# BƯỚC 5: Lên link GitHub (https://github.com/nguyenquockiet2462005/fido2)
-# Bấm nút vàng "Compare & pull request" -> Ghi nội dung -> Bấm "Create pull request"
-# Báo Nhóm trưởng vào kiểm tra và Merge vào main!
-PHẦN 6: Kế hoạch 4 Sprint (Lộ trình hành động ngay)
-Sprint 1 (Ngay hôm nay - 1 ngày): Khởi tạo khung dự án & Test Git
-Trưởng nhóm (Bạn):
-Tạo cấu trúc thư mục rỗng chuẩn: tạo folder routes, public/css, public/js.
-Viết file server.js cơ bản (chạy Express trên cổng 3000, phục vụ thư mục public, cấu hình session).
-Commit và push lên main.
-Cả 3 thành viên:
-Chạy git pull origin main, tạo nhánh riêng của mình và kiểm tra xem máy mình chạy được npm start hay chưa.
-Sprint 2 (2 - 3 ngày): Hiện thực luồng ĐĂNG KÝ (Registration / Tạo Passkey)
-Người 4 (UI): Tạo giao diện ô nhập Username + Nút "Đăng ký bằng Passkey/Vân tay".
-Người 2 (Backend): Viết 2 API:
-POST /api/auth/register-options: Sinh challenge và các tùy chọn FIDO2.
-POST /api/auth/register-verify: Nhận Public Key từ trình duyệt và lưu lại.
-Người 3 (Frontend WebAuthn):
-Bắt sự kiện bấm nút Đăng ký -> Gửi username lên backend -> Nhận options -> Gọi startRegistration() của @simplewebauthn/browser -> Gửi kết quả về backend xác minh.
-Trưởng nhóm: Hỗ trợ kết nối, test thực tế trên máy (quét vân tay TouchID hoặc Windows Hello).
-Sprint 3 (2 - 3 ngày): Hiện thực luồng ĐĂNG NHẬP (Authentication / Quét Passkey)
-Tương tự Sprint 2 nhưng cho luồng Đăng nhập (dùng generateAuthenticationOptions và startAuthentication).
-Người 1: Sau khi đăng nhập thành công, lưu trạng thái đăng nhập vào req.session.loggedIn = true.
-Sprint 4 (2 ngày): Hoàn thiện giao diện, Live Inspector & Kịch bản báo cáo
-Người 4 hoàn thiện hộp thoại giải thích luồng (Step-by-step visualizer).
-Cả nhóm ngồi lại review toàn bộ code, cùng nhau trả lời các câu hỏi lý thuyết:
-Private Key nằm ở đâu? (Nằm trong chip bảo mật TPM / Secure Enclave của máy tính hoặc điện thoại người dùng, không bao giờ gửi qua mạng).
-Public Key nằm ở đâu? (Nằm ở Server).
-Tại sao FIDO2 chống được Phishing? (Vì trình duyệt tự động đính kèm origin/tên miền vào challenge, hacker tạo trang web giả mạo domain khác sẽ bị từ chối ngay).
-BƯỚC ĐẦU TIÊN CỦA BẠN BÂY GIỜ
-Bạn có muốn tôi giúp bạn:
 
-Dựng sẵn bộ khung chuẩn cho 
+# 2. Tạo nhánh riêng (chỉ lần đầu)
+git checkout -b feature/<ten-chuc-nang>
 
-server.js
- (Express + Session + Static Files) và cấu trúc thư mục routes/ cùng public/ có chú thích rõ ràng bằng tiếng Việt?
-Soạn sẵn một bản hướng dẫn phân công công việc chi tiết dạng Markdown để bạn cập nhật vào 
+# 3. Commit
+git add .
+git commit -m "feat: mo ta ngan gon"
 
-README.md
- cho 3 bạn còn lại đọc và làm theo ngay?
+# 4. Đẩy nhánh
+git push origin feature/<ten-chuc-nang>
+```
+
+Sau đó mở Pull Request trên GitHub vào `main`. Nhóm trưởng review, hỏi lại người viết về đoạn code chính, rồi mới Merge.
+
+**Quy ước**
+
+- Không commit `node_modules/`, `.env`, private key hoặc token. Các mục này nằm trong `.gitignore`.
+- Commit message theo dạng `feat:`, `fix:`, `docs:`, `refactor:`.
+- Khi `git pull` báo lỗi vì có thay đổi chưa commit, hãy commit hoặc dùng `git stash` trước.
+
+## 10. Giới hạn của bản demo
+
+- Dữ liệu user và credential nên được đặt trong cơ sở dữ liệu thật (SQLite, PostgreSQL, MongoDB) khi triển khai. Lưu trong bộ nhớ sẽ mất khi server khởi động lại.
+- Session dùng `express-session` với store mặc định, chưa phù hợp cho môi trường production.
+- Chưa có cơ chế khôi phục tài khoản khi mất thiết bị. Hướng mở rộng gồm đăng ký nhiều Passkey cho một tài khoản, hoặc mã dự phòng.
+- Chưa cấu hình HTTPS và `rpID` cho tên miền thật.
+
+## 11. Tài liệu tham khảo
+
+- W3C, [Web Authentication: An API for accessing Public Key Credentials, Level 2](https://www.w3.org/TR/webauthn-2/)
+- FIDO Alliance, [FIDO2 specifications](https://fidoalliance.org/specifications/)
+- [SimpleWebAuthn documentation](https://simplewebauthn.dev/docs/)
+- MDN, [Web Authentication API](https://developer.mozilla.org/docs/Web/API/Web_Authentication_API)
