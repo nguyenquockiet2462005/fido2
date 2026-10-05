@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title> FIDO2 / WebAuthn Demo - Kiểm Tra Kết Nối</title>
+  <title>FIDO2 / WebAuthn Demo - Kiểm Tra Kết Nối</title>
+  
+  <!-- BẮT BUỘC CÓ: Nhúng thư viện WebAuthn để gọi Windows Hello -->
+  <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+  
   <style>
     :root {
       --bg-color: #0f172a;
@@ -14,6 +17,7 @@
       --primary: #38bdf8;
       --success: #22c55e;
       --border: #334155;
+      --input-bg: #090d16;
     }
 
     body {
@@ -48,10 +52,7 @@
       gap: 10px;
     }
 
-    p {
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
+    p { color: var(--text-muted); line-height: 1.6; }
 
     .status-badge {
       display: inline-flex;
@@ -65,34 +66,41 @@
       font-weight: 500;
       margin-bottom: 20px;
     }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success);
+    /* Định dạng cho ô nhập tên */
+    .input-group { margin: 20px 0 10px 0; }
+    
+    input[type="text"] {
+      background: var(--input-bg);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+      outline: none;
     }
+    input[type="text"]:focus { border-color: var(--primary); }
 
-    .btn-group {
-      display: flex;
-      gap: 12px;
-      margin: 20px 0;
-    }
+    .btn-group { display: flex; gap: 12px; margin: 15px 0 20px 0; }
 
     button {
+      flex: 1;
       background: var(--primary);
       color: #0f172a;
       border: none;
-      padding: 10px 16px;
+      padding: 12px 16px;
       border-radius: 6px;
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.2s;
     }
-
-    button:hover {
-      opacity: 0.9;
-    }
+    button:hover { opacity: 0.9; }
+    
+    /* Nút đăng nhập màu xanh lá */
+    button#btn-login { background: var(--success); color: white; }
 
     pre {
       background: #090d16;
@@ -100,9 +108,10 @@
       border-radius: 8px;
       padding: 16px;
       overflow-x: auto;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       color: #38bdf8;
-      max-height: 200px;
+      height: 150px;
+      line-height: 1.5;
     }
 
     .footer-note {
@@ -114,55 +123,38 @@
     }
   </style>
 </head>
-
 <body>
 
   <div class="card">
     <div class="status-badge">
-      <span class="status-dot"></span>
-      Server & Session đã sẵn sàng!
+      <span class="status-dot"></span> Server & UI đã kết nối sẵn sàng!
     </div>
 
-    <h1> FIDO2 / WebAuthn Demo</h1>
-    <p>
-      Server Express và cơ chế bảo vệ phiên <strong>Express-Session</strong> cùng <strong>In-Memory Database</strong> đã
-      được khởi tạo thành công.
-    </p>
+    <h1>FIDO2 / WebAuthn Demo</h1>
+    <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
 
+    <!-- Ô nhập Username và các Nút bấm -->
+    <div class="input-group">
+      <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
+    </div>
+    
     <div class="btn-group">
-      <button id="btnHealth">Kiểm tra Server (/api/health)</button>
-      <button id="btnSession">Kiểm tra Session (/api/session-debug)</button>
+      <button id="btn-register">Đăng ký Passkey</button>
+      <button id="btn-login">Đăng nhập Passkey</button>
     </div>
 
+    <!-- Màn hình Live Inspector -->
     <div>
-      <p style="margin-bottom: 6px; font-weight: 500;">Kết quả trả về từ Backend:</p>
-      <pre id="outputLog">// Bấm một trong hai nút phía trên để kiểm tra kết nối API...</pre>
+      <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
+      <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
     </div>
 
     <div class="footer-note">
-      <strong>Bước tiếp theo:</strong> Thành viên 2 sẽ viết API FIDO2 trong <code>routes/auth.js</code>, Thành viên 3 sẽ
-      gọi WebAuthn API trong <code>public/js/webauthn.js</code>, và Thành viên 4 sẽ thiết kế giao diện đăng nhập/đăng ký
-      tại đây!
+      <strong>Bước tiếp theo:</strong> Theo dõi luồng dữ liệu trao đổi giữa Client và Server trên màn hình Inspector.
     </div>
   </div>
 
-  <script>
-    const outputLog = document.getElementById('outputLog');
-
-    async function callApi(endpoint) {
-      outputLog.innerText = `Đang gửi request tới ${endpoint}...`;
-      try {
-        const res = await fetch(endpoint);
-        const data = await res.json();
-        outputLog.innerText = JSON.stringify(data, null, 2);
-      } catch (err) {
-        outputLog.innerText = `Lỗi kết nối: ${err.message}`;
-      }
-    }
-
-    document.getElementById('btnHealth').addEventListener('click', () => callApi('/api/health'));
-    document.getElementById('btnSession').addEventListener('click', () => callApi('/api/session-debug'));
-  </script>
+  <!-- Liên kết phần giao diện này với file JS xử lý sự kiện -->
+  <script src="js/ui.js"></script>
 </body>
-
 </html>
