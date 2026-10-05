@@ -43,21 +43,27 @@ router.post('/register-options', async (req, res) => {
         user = createUser(username);
     }
 
-    // Gọi chuyên gia ra một bài toán sinh trắc học
-    const options = await generateRegistrationOptions({
-        rpName,
-        rpID,
-        userID: user.id,
-        userName: user.username,
-        attestationType: 'none',
-        authenticatorSelection: { residentKey: 'discouraged', userVerification: 'preferred' },
-    });
+    try {
+        // Gọi chuyên gia ra một bài toán sinh trắc học
+        const options = await generateRegistrationOptions({
+            rpName,
+            rpID,
+            // Chuyển chuỗi văn bản (String) sang mảng Byte (Uint8Array) theo chuẩn FIDO2 mới
+            userID: new TextEncoder().encode(user.id),
+            userName: user.username,
+            attestationType: 'none',
+            authenticatorSelection: { residentKey: 'discouraged', userVerification: 'preferred' },
+        });
 
-    // Lưu "Đề thi gốc" vào túi cá nhân (Session) của người dùng đó
-    req.session.currentChallenge = options.challenge;
+        // Lưu "Đề thi gốc" vào túi cá nhân (Session) của người dùng đó
+        req.session.currentChallenge = options.challenge;
 
-    // Phát đề thi (chuỗi JSON) về cho điện thoại
-    res.json(options);
+        // Phát đề thi (chuỗi JSON) về cho điện thoại
+        res.json(options);
+    } catch (error) {
+        console.error("Lỗi khi tạo challenge đăng ký:", error);
+        return res.status(500).json({ error: 'Lỗi hệ thống khi khởi tạo đăng ký.' });
+    }
 });
 
 // 2. API Xác thực Đăng ký (Chấm điểm)
@@ -127,22 +133,27 @@ router.post('/login-options', async (req, res) => {
         return res.status(400).json({ error: 'Tài khoản này chưa cài đặt sinh trắc học!' });
     }
 
-    // Gọi chuyên gia ra đề thi dành riêng cho Đăng nhập
-    const options = await generateAuthenticationOptions({
-        rpID,
-        // Ép điện thoại chỉ được dùng đúng cái vân tay đã đăng ký hôm trước
-        allowCredentials: userDevices.map(dev => ({
-            id: dev.credentialID,
-            type: 'public-key',
-        })),
-        userVerification: 'preferred',
-    });
+    try {
+        // Gọi chuyên gia ra đề thi dành riêng cho Đăng nhập
+        const options = await generateAuthenticationOptions({
+            rpID,
+            // Ép điện thoại chỉ được dùng đúng cái vân tay đã đăng ký hôm trước
+            allowCredentials: userDevices.map(dev => ({
+                id: dev.credentialID,
+                type: 'public-key',
+            })),
+            userVerification: 'preferred',
+        });
 
-    // Tiếp tục lưu Đề thi mới vào túi Session của khách
-    req.session.currentChallenge = options.challenge;
+        // Tiếp tục lưu Đề thi mới vào túi Session của khách
+        req.session.currentChallenge = options.challenge;
 
-    // Phát đề thi về cho điện thoại hiển thị bảng quét
-    res.json(options);
+        // Phát đề thi về cho điện thoại hiển thị bảng quét
+        res.json(options);
+    } catch (error) {
+        console.error("Lỗi khi tạo challenge đăng nhập:", error);
+        return res.status(500).json({ error: 'Lỗi hệ thống khi khởi tạo đăng nhập.' });
+    }
 });
 
 // 4. API Xác thực Đăng nhập (Chấm điểm)
