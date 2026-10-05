@@ -122,7 +122,7 @@ app.use('/api/auth', authRoutes);
 // ==========================================
 app.listen(PORT, () => {
   console.log('====================================================');
-  console.log(`🚀 Server FIDO2 đang chạy tại: http://localhost:${PORT}`);
-  console.log(`📁 Thư mục giao diện phục vụ từ: ${path.join(__dirname, 'public')}`);
+  console.log(`Server FIDO2 đang chạy tại: http://localhost:${PORT}`);
+  console.log(`Thư mục giao diện phục vụ từ: ${path.join(__dirname, 'public')}`);
   console.log('====================================================');
 });
