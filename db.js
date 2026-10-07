@@ -21,8 +21,77 @@
 //     }
 //   ]
 // }
+/**
+ * db.js - Cơ chế lưu trữ dữ liệu linh hoạt (Hybrid Persistence)
+ * 
+ * NGUYÊN LÝ HOẠT ĐỘNG:
+ * 1. Lưu trữ trong RAM (Cache) để đọc/ghi siêu tốc.
+ * 2. Tự động đồng bộ ra file `data/users.json` để không bị mất dữ liệu khi restart server.
+ * 3. Bảo vệ kiểu dữ liệu Uint8Array của Khóa công khai (Public Key).
+ */
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+// Đường dẫn tới thư mục và file lưu dữ liệu
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'users.json');
+
 // Kho lưu trữ danh sách người dùng trong bộ nhớ RAM
-const users = [];
+// const users = [];
+let users = [];
+
+// ==========================================
+// 1. CÁC HÀM ĐỒNG BỘ FILE TỰ ĐỘNG
+// ==========================================
+// Hàm lưu dữ liệu từ RAM xuống file JSON
+function saveUsersToFile() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    // Chuyển mảng users sang chuỗi JSON và ghi đè vào file
+    fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('⚠️ [DB] Lỗi khi lưu dữ liệu ra file:', error.message);
+  }
+}
+// Hàm nạp dữ liệu từ file JSON vào RAM khi khởi động
+function loadUsersFromFile() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const rawData = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsedUsers = JSON.parse(rawData);
+      // 💡 QUAN TRỌNG: Khôi phục lại kiểu Uint8Array cho publicKey
+      users = parsedUsers.map(user => ({
+        ...user,
+        credentials: (user.credentials || []).map(cred => ({
+          ...cred,
+          publicKey: cred.publicKey ? new Uint8Array(Object.values(cred.publicKey)) : cred.publicKey,
+        }))
+      }));
+      console.log(`📦 [DB] Đã khôi phục thành công ${users.length} tài khoản từ data/users.json`);
+    } else {
+      console.log('📦 [DB] Chưa có file users.json, khởi tạo kho dữ liệu mới.');
+    }
+  } catch (error) {
+    console.error('⚠️ [DB] Lỗi khi đọc file users.json:', error.message);
+    users = [];
+  }
+}
+// Tự động gọi đọc file ngay khi Server bật lên
+loadUsersFromFile();
+
+
+// ==========================================
+// 2. CÁC HÀM NGHIỆP VỤ FIDO2 CHUẨN
+// ==========================================
+
 /**
  * Hàm tìm kiếm một người dùng trong kho theo tên đăng nhập
  */
@@ -42,6 +111,7 @@ export function createUser(username) {
     credentials: [], // Khởi tạo mảng chìa khoá rỗng (vì người dùng mới dky, chưa quét vân tay nên chưa có khoá)   
   };
   users.push(newUser);
+  saveUsersToFile(); // Tự động lưu
   return newUser;
 }
 // Giải thích từng chi tiết:
@@ -67,6 +137,7 @@ export function addCredentialToUser(username, credentialInfo) {
     user.credentials = [];
   }
   user.credentials.push(credentialInfo); //nhét chìa khoá mới vào mảng creadentials của người đó
+  saveUsersToFile(); // Tự động lưu
   return user;
 }
 
@@ -114,6 +185,7 @@ export function updateCredentialCounter(username, credentialId, newCounter) {
     throw new Error(`Không tìm thấy credential với id: ${credentialId}`);
   }
   cred.counter = newCounter;
+  saveUsersToFile(); // Tự động lưu
 }
 export function getAllUsers() {
   return [...users]; // Trả về bản sao để bảo vệ mảng gốc
