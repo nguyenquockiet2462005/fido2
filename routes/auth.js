@@ -25,8 +25,11 @@ const router = express.Router();
 
 // Cấu hình định danh cho máy chủ
 const rpName = 'FIDO2 Demo';
-const rpID = 'localhost';
-const origin = 'http://localhost:3000';
+// const rpID = 'localhost';
+// const origin = 'http://localhost:3000';
+const rpID = process.env.RP_ID || 'localhost';
+const origin = process.env.ORIGIN || 'http://localhost:3000';
+
 
 
 // ==========================================
