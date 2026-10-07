@@ -62,6 +62,14 @@ router.post('/register-options', async (req, res) => {
       userID: new TextEncoder().encode(user.id),
       userName: user.username,
       attestationType: 'none',
+
+      // Loại trừ các chìa khóa đã đăng ký để tránh tạo trùng lặp trên cùng thiết bị
+      excludeCredentials: (user.credentials || []).map(cred => ({
+        id: cred.id,
+        type: 'public-key',
+        transports: cred.transports || [],
+      })),
+
       authenticatorSelection: {
         residentKey: 'discouraged',
         userVerification: 'preferred'
@@ -218,7 +226,7 @@ router.post('/login-options', async (req, res) => {
         type: 'public-key',
         transports: dev.transports || [],
       })),
-      userVerification: 'discouraged', // Cấu hình linh hoạt đồng bộ với đăng ký
+      userVerification: 'preferred',
     });
 
     req.session.currentChallenge = options.challenge;
