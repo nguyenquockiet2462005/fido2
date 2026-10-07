@@ -60,20 +60,21 @@ router.post('/register-options', async (req, res) => {
 
       // Chuyển chuỗi văn bản (String) sang mảng Byte (Uint8Array)
       userID: new TextEncoder().encode(user.id),
-
       userName: user.username,
-
       attestationType: 'none',
-
       authenticatorSelection: {
         residentKey: 'discouraged',
-        // 💡 ĐÃ CHỈNH SỬA Ở ĐÂY: Đổi từ 'preferred' sang 'discouraged' để tránh lỗi bắt buộc quét vân tay/PIN khắt khe
-        userVerification: 'discouraged'
+        userVerification: 'preferred'
       },
     });
+    // 'discouraged': Không cần quét vân tay/mặt, chỉ cần chạm nhẹ là cho qua.
+    // 'preferred': Nếu máy có Touch ID / Windows Hello / Face ID, hãy BẮT BUỘC người dùng quét sinh trắc học. Nếu máy cũ không có thì mới châm chước.
+    // 'required' : BẮT BUỘC phải quét vân tay/mặt, không có là báo lỗi.
+
 
     // Lưu "Đề thi gốc" vào túi cá nhân (Session)
-    req.session.currentChallenge = options.challenge;
+    req.session.currentChallenge = options.challenge; //Lưu Challenge vào túi phiên
+    //(Rất quan trọng: Server phải nhớ chuỗi này trong session để tí nữa đối chiếu xem chữ ký có ký đúng đề bài không, chống Replay Attack)
 
     // In ra Terminal để nhóm dễ theo dõi quá trình
     console.log('==========================================');
