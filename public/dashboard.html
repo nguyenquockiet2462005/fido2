@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIDO2 Security Dashboard - Quản Trị Người Dùng</title>
+
+    <!-- Nhúng file CSS đã tách riêng -->
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🛡️ FIDO2 Security Dashboard</h1>
+                <p style="color: var(--text-muted); margin: 4px 0 0 0;">Quản lý và giám sát các khóa Passkey đã lưu trữ
+                    trên Server</p>
+            </div>
+            <div class="header-actions">
+                <a href="index.html" class="btn-action">⬅️ Quay lại Đăng Nhập</a>
+                <button onclick="fetchUsers()" class="btn-action btn-primary">🔄 Làm mới</button>
+            </div>
+        </div>
+
+        <!-- Hàng thống kê tổng quan -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">TỔNG TÀI KHOẢN</div>
+                <div class="stat-value" id="stat-total-users">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">TỔNG PASSKEYS</div>
+                <div class="stat-value" id="stat-total-keys" style="color: var(--success);">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">CHẾ ĐỘ BẢO MẬT</div>
+                <div class="stat-value" style="font-size: 1.2rem; color: #a855f7;">Passwordless</div>
+            </div>
+        </div>
+
+        <!-- Bảng danh sách tài khoản -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tài Khoản</th>
+                        <th>Mã Người Dùng (User ID)</th>
+                        <th>Số Lượng Passkey</th>
+                        <th>Loại Thiết Bị (Transports)</th>
+                        <th>Số Lần Đăng Nhập (Counter)</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table-body">
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-muted);">Đang tải dữ liệu từ máy
+                            chủ...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function fetchUsers() {
+            try {
+                const res = await fetch('/api/users-debug');
+                const data = await res.json();
+
+                document.getElementById('stat-total-users').innerText = data.totalUsers || 0;
+
+                let totalKeys = 0;
+                const tbody = document.getElementById('user-table-body');
+                tbody.innerHTML = '';
+
+                if (!data.users || data.users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Chưa có tài khoản nào được tạo.</td></tr>';
+                    return;
+                }
+
+                data.users.forEach(user => {
+                    const credCount = (user.credentials || []).length;
+                    totalKeys += credCount;
+
+                    let transportsBadges = '';
+                    let counters = [];
+
+                    if (credCount === 0) {
+                        transportsBadges = '<span style="color: #64748b; font-size: 0.85rem;">Chưa có khóa</span>';
+                    } else {
+                        user.credentials.forEach(cred => {
+                            (cred.transports || []).forEach(t => {
+                                if (t === 'internal') transportsBadges += `<span class="badge badge-internal">💻 TouchID/Windows Hello</span>`;
+                                else if (t === 'hybrid') transportsBadges += `<span class="badge badge-hybrid">📱 Điện thoại (Hybrid)</span>`;
+                                else transportsBadges += `<span class="badge badge-internal">${t}</span>`;
+                            });
+                            counters.push(`<span class="badge badge-counter">${cred.counter} lần</span>`);
+                        });
+                    }
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+            <td><strong>👤 ${user.username}</strong></td>
+            <td><span class="code-snippet">${user.id}</span></td>
+            <td><span style="font-weight: 600; color: ${credCount > 0 ? '#22c55e' : '#94a3b8'};">${credCount} Passkey</span></td>
+            <td>${transportsBadges}</td>
+            <td>${counters.length > 0 ? counters.join(' ') : '0'}</td>
+          `;
+                    tbody.appendChild(row);
+                });
+
+                document.getElementById('stat-total-keys').innerText = totalKeys;
+
+            } catch (err) {
+                console.error("Lỗi:", err);
+                document.getElementById('user-table-body').innerHTML = `<tr><td colspan="5" style="text-align: center; color: #ef4444;">Lỗi khi tải dữ liệu: ${err.message}</td></tr>`;
+            }
+        }
+
+        // Tự động tải dữ liệu ngay khi mở trang
+        fetchUsers();
+    </script>
+</body>
+
+</html>
