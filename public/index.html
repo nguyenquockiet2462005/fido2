@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FIDO2 / WebAuthn Demo - Kiểm Tra Kết Nối</title>
+
+  <!-- Nhúng thư viện WebAuthn để gọi Windows Hello -->
+  <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+
+  <!-- Nhúng file CSS giao diện riêng biệt -->
+  <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+
+  <div class="card">
+    <div class="status-badge">
+      <span class="status-dot"></span> Server đã kết nối sẵn sàng!
+    </div>
+
+    <h1>FIDO2 / WebAuthn Demo</h1>
+    <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
+
+    <!-- Ô nhập Username và các Nút bấm -->
+    <div class="input-group">
+      <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-register">Đăng ký Passkey</button>
+      <button id="btn-login">Đăng nhập Passkey</button>
+    </div>
+
+    <!-- Màn hình Live Inspector -->
+    <div>
+      <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
+      <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
+    </div>
+
+    <div class="footer-note">
+      <strong>Bước tiếp theo:</strong> Theo dõi luồng dữ liệu trao đổi giữa Client và Server trên màn hình Inspector.
+    </div>
+  </div>
+
+  <!-- Liên kết phần giao diện này với file JS xử lý sự kiện -->
+  <!-- <script src="js/ui.js"></script> -->
+  <script type="module" src="js/ui.js"></script>
+</body>
+
+</html>

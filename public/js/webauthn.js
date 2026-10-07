@@ -3,12 +3,17 @@
  * Nhiệm vụ: Chuyên xử lý logic gọi API Backend và tương tác thư viện WebAuthn
  */
 
-const { startRegistration, startAuthentication } = window.SimpleWebAuthnBrowser;
-
 // ==========================================
 // 1. LUỒNG ĐĂNG KÝ PASSKEY
 // ==========================================
 export async function handleRegister(username, logCallback) {
+    const { startRegistration } = window.SimpleWebAuthnBrowser || {};
+    if (!startRegistration) {
+        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
+        logCallback("❌ " + errorMsg);
+        return { success: false, error: errorMsg };
+    }
+
     try {
         logCallback("🟡 Bước 1: Đang gửi yêu cầu xin Challenge từ Server...");
         const optionsRes = await fetch('/api/auth/register-options', {
@@ -16,7 +21,7 @@ export async function handleRegister(username, logCallback) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-        
+
         const optionsJSON = await optionsRes.json();
         if (optionsJSON.error) throw new Error(optionsJSON.error);
 
@@ -29,7 +34,7 @@ export async function handleRegister(username, logCallback) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, response: attResp })
         });
-        
+
         const verifyJSON = await verifyRes.json();
         if (verifyJSON.verified) {
             logCallback("✅ Bước 4: Xác minh thành công! Đã lưu Passkey vào Database.");
@@ -47,6 +52,13 @@ export async function handleRegister(username, logCallback) {
 // 2. LUỒNG ĐĂNG NHẬP PASSKEY
 // ==========================================
 export async function handleLogin(username, logCallback) {
+    const { startAuthentication } = window.SimpleWebAuthnBrowser || {};
+    if (!startAuthentication) {
+        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
+        logCallback("❌ " + errorMsg);
+        return { success: false, error: errorMsg };
+    }
+
     try {
         logCallback("🟡 Bước 1: Đang gửi yêu cầu xin Challenge đăng nhập từ Server...");
         const optionsRes = await fetch('/api/auth/login-options', {
@@ -54,7 +66,7 @@ export async function handleLogin(username, logCallback) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-        
+
         const optionsJSON = await optionsRes.json();
         if (optionsRes.status === 404) {
             throw new Error("Tài khoản này chưa có Passkey. Vui lòng đăng ký trước!");
@@ -70,7 +82,7 @@ export async function handleLogin(username, logCallback) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, response: asseResp })
         });
-        
+
         const verifyJSON = await verifyRes.json();
         if (verifyJSON.verified) {
             logCallback("✅ Bước 4: Đăng nhập thành công! Đã cấp quyền truy cập.");
