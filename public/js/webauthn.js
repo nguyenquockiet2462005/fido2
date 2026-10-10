@@ -1,5 +1,5 @@
 /**
- * public/js/webauthn.js - TƯƠNG THÍCH HOÀN HẢO VỚI SERVER HIỆN TẠI
+ * public/js/webauthn.js - TƯƠNG TÁC API & THƯ VIỆN SIMPLEWEBAUTHN
  */
 
 const getStartRegistration = () => window.SimpleWebAuthnBrowser?.startRegistration;

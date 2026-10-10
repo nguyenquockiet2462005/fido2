@@ -30,9 +30,14 @@
         <button id="btn-register">Đăng ký Passkey</button>
         <button id="btn-login">Đăng nhập Passkey</button>
       </div>
+
+      <!-- Link truy cập trang Security Dashboard hệ thống -->
+      <div style="margin-top: 15px; text-align: center;">
+        <a href="dashboard.html" style="color: var(--primary); font-size: 0.9rem; text-decoration: none;">📊 Xem Security Dashboard hệ thống &rarr;</a>
+      </div>
     </div>
 
-    <!-- 2. MÀN HÌNH ĐÃ XÁC THỰC (DASHBOARD VIEW) - ĐÃ BỎ PHẦN DANH SÁCH PASSKEY -->
+    <!-- 2. MÀN HÌNH ĐÃ XÁC THỰC (DASHBOARD VIEW) -->
     <div id="dashboard-view" class="hidden">
       <div class="user-profile">
         <h2 id="welcome-message">👋 Xin chào, user!</h2>
@@ -55,6 +60,7 @@
     </div>
   </div>
 
+  <!-- Nạp file điều khiển giao diện chính dưới dạng ES6 Module -->
   <script type="module" src="js/ui.js"></script>
 </body>
 </html>
