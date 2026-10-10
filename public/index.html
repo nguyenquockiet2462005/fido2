@@ -1,41 +1,56 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FIDO2 / WebAuthn Demo - Kiểm Tra Kết Nối</title>
-
-  <!-- Nhúng thư viện WebAuthn để gọi Windows Hello -->
+  <title>FIDO2 / WebAuthn Demo - Passkey Dashboard</title>
+  
+  <link rel="stylesheet" href="./css/style.css">
   <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
-
-  <!-- Nhúng file CSS giao diện riêng biệt -->
-  <link rel="stylesheet" href="css/style.css">
-
 </head>
-
 <body>
 
   <div class="card">
-    <div class="status-badge">
-      <span class="status-dot"></span> Server đã kết nối sẵn sàng!
+
+    <!-- 1. MÀN HÌNH KHÁCH (GUEST VIEW) -->
+    <div id="guest-view">
+      <div class="status-badge">
+        <span class="status-dot"></span> Server & UI đã kết nối sẵn sàng!
+      </div>
+
+      <h1>🔑 FIDO2 / WebAuthn Demo</h1>
+
+      <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
+
+      <div class="input-group">
+        <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
+      </div>
+      
+      <div class="btn-group">
+        <button id="btn-register">Đăng ký Passkey</button>
+        <button id="btn-login">Đăng nhập Passkey</button>
+      </div>
+
+      <!-- Link truy cập trang Security Dashboard hệ thống -->
+      <div style="margin-top: 15px; text-align: center;">
+        <a href="dashboard.html" style="color: var(--primary); font-size: 0.9rem; text-decoration: none;">📊 Xem Security Dashboard hệ thống &rarr;</a>
+      </div>
     </div>
 
-    <h1>FIDO2 / WebAuthn Demo</h1>
-    <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
+    <!-- 2. MÀN HÌNH ĐÃ XÁC THỰC (DASHBOARD VIEW) -->
+    <div id="dashboard-view" class="hidden">
+      <div class="user-profile">
+        <h2 id="welcome-message">👋 Xin chào, user!</h2>
+        <p style="margin: 0; font-size: 0.9rem;">Bạn đã đăng nhập thành công bằng thiết bị Passkey an toàn.</p>
+      </div>
 
-    <!-- Ô nhập Username và các Nút bấm -->
-    <div class="input-group">
-      <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
+      <div style="margin-top: 20px;">
+        <button id="btn-logout" class="btn-danger">Đăng xuất khỏi tài khoản</button>
+      </div>
     </div>
 
-    <div class="btn-group">
-      <button id="btn-register">Đăng ký Passkey</button>
-      <button id="btn-login">Đăng nhập Passkey</button>
-    </div>
-
-    <!-- Màn hình Live Inspector -->
-    <div>
+    <!-- MÀN HÌNH LIVE INSPECTOR -->
+    <div style="margin-top: 24px;">
       <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
       <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
     </div>
@@ -45,9 +60,7 @@
     </div>
   </div>
 
-  <!-- Liên kết phần giao diện này với file JS xử lý sự kiện -->
-  <!-- <script src="js/ui.js"></script> -->
+  <!-- Nạp file điều khiển giao diện chính dưới dạng ES6 Module -->
   <script type="module" src="js/ui.js"></script>
 </body>
-
 </html>

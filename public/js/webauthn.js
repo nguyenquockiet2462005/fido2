@@ -1,27 +1,23 @@
 /**
- * public/js/webauthn.js - KHÔNG GIAN LÀM VIỆC CỦA HUY (Frontend FIDO2)
- * Nhiệm vụ: Chuyên xử lý logic gọi API Backend và tương tác thư viện WebAuthn
+ * public/js/webauthn.js - TƯƠNG TÁC API & THƯ VIỆN SIMPLEWEBAUTHN
  */
 
-// ==========================================
-// 1. LUỒNG ĐĂNG KÝ PASSKEY
-// ==========================================
-export async function handleRegister(username, logCallback) {
-    const { startRegistration } = window.SimpleWebAuthnBrowser || {};
-    if (!startRegistration) {
-        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
-        logCallback("❌ " + errorMsg);
-        return { success: false, error: errorMsg };
-    }
+const getStartRegistration = () => window.SimpleWebAuthnBrowser?.startRegistration;
+const getStartAuthentication = () => window.SimpleWebAuthnBrowser?.startAuthentication;
 
+// 1. LUỒNG ĐĂNG KÝ PASSKEY
+export async function handleRegister(username, logCallback) {
     try {
+        const startRegistration = getStartRegistration();
+        if (!startRegistration) throw new Error("Chưa nạp xong thư viện SimpleWebAuthnBrowser. Vui lòng thử lại!");
+
         logCallback("🟡 Bước 1: Đang gửi yêu cầu xin Challenge từ Server...");
         const optionsRes = await fetch('/api/auth/register-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-
+        
         const optionsJSON = await optionsRes.json();
         if (optionsJSON.error) throw new Error(optionsJSON.error);
 
@@ -34,10 +30,10 @@ export async function handleRegister(username, logCallback) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, response: attResp })
         });
-
+        
         const verifyJSON = await verifyRes.json();
-        if (verifyJSON.verified) {
-            logCallback("✅ Bước 4: Xác minh thành công! Đã lưu Passkey vào Database.");
+        if (verifyRes.ok && (verifyJSON.verified !== false)) {
+            logCallback("✅ Bước 4: Xác minh thành công! Đã lưu Passkey mới.");
             return { success: true };
         } else {
             throw new Error(verifyJSON.error || "Xác minh thất bại từ máy chủ.");
@@ -48,25 +44,19 @@ export async function handleRegister(username, logCallback) {
     }
 }
 
-// ==========================================
 // 2. LUỒNG ĐĂNG NHẬP PASSKEY
-// ==========================================
 export async function handleLogin(username, logCallback) {
-    const { startAuthentication } = window.SimpleWebAuthnBrowser || {};
-    if (!startAuthentication) {
-        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
-        logCallback("❌ " + errorMsg);
-        return { success: false, error: errorMsg };
-    }
-
     try {
+        const startAuthentication = getStartAuthentication();
+        if (!startAuthentication) throw new Error("Chưa nạp xong thư viện SimpleWebAuthnBrowser. Vui lòng thử lại!");
+
         logCallback("🟡 Bước 1: Đang gửi yêu cầu xin Challenge đăng nhập từ Server...");
         const optionsRes = await fetch('/api/auth/login-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-
+        
         const optionsJSON = await optionsRes.json();
         if (optionsRes.status === 404) {
             throw new Error("Tài khoản này chưa có Passkey. Vui lòng đăng ký trước!");
@@ -82,16 +72,42 @@ export async function handleLogin(username, logCallback) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, response: asseResp })
         });
-
+        
         const verifyJSON = await verifyRes.json();
-        if (verifyJSON.verified) {
+        
+        if (verifyRes.ok && !verifyJSON.error) {
             logCallback("✅ Bước 4: Đăng nhập thành công! Đã cấp quyền truy cập.");
             return { success: true };
         } else {
-            throw new Error("Chữ ký sinh trắc học không hợp lệ.");
+            throw new Error(verifyJSON.error || "Chữ ký sinh trắc học không hợp lệ.");
         }
     } catch (error) {
         logCallback("❌ Lỗi Đăng nhập: " + error.message);
         return { success: false, error: error.message };
+    }
+}
+
+// 3. LUỒNG ĐĂNG XUẤT (LOGOUT)
+export async function handleLogout(logCallback) {
+    try {
+        logCallback("🟡 Đang gửi yêu cầu đăng xuất tới Server...");
+        await fetch('/api/auth/logout', { method: 'POST' });
+        logCallback("✅ Đã hủy phiên đăng nhập an toàn.");
+        return { success: true };
+    } catch (error) {
+        logCallback("⚠️ Đăng xuất cục bộ: " + error.message);
+        return { success: true };
+    }
+}
+
+// 4. LẤY DANH SÁCH PASSKEY CỦA USER
+export async function fetchUserPasskeys(username) {
+    try {
+        const res = await fetch(`/api/auth/passkeys?username=${encodeURIComponent(username)}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.passkeys || [];
+    } catch (error) {
+        return [];
     }
 }
