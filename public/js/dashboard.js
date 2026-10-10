@@ -2,9 +2,6 @@
  * public/js/dashboard.js - Logic hiển thị và cập nhật dữ liệu Security Dashboard
  */
 
-
-const btnDashboard = document.getElementById('btn-dashboard');
-
 // Hàm gọi API lấy danh sách tài khoản và vẽ ra bảng
 async function fetchUsers() {
     try {

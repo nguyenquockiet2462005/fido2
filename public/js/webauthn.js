@@ -95,3 +95,19 @@ export async function handleLogin(username, logCallback) {
         return { success: false, error: error.message };
     }
 }
+
+// 3. LUỒNG ĐĂNG XUẤT (LOGOUT)
+export async function handleLogout(logCallback) {
+    try {
+        logCallback("🟡 Đang gửi yêu cầu đăng xuất tới Server...");
+        await fetch('/api/auth/logout', { method: 'POST' });
+        logCallback("✅ Đã hủy phiên đăng nhập an toàn.");
+        return { success: true };
+    } catch (error) {
+        logCallback("⚠️ Đăng xuất cục bộ: " + error.message);
+        return { success: true };
+    }
+}
+
+
+

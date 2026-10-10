@@ -10,13 +10,22 @@
  */
 
 // 1. Nhập (Import) 2 hàm xử lý FIDO2 từ file của Thành viên 3 (Huy)
-import { handleRegister, handleLogin } from './webauthn.js';
+import { handleRegister, handleLogin, handleLogout } from './webauthn.js';
 
 // 2. Lấy các phần tử giao diện từ DOM
 const outputLog = document.getElementById('outputLog');
+const guestView = document.getElementById('guest-view');
+const dashboardView = document.getElementById('dashboard-view');
+
 const btnRegister = document.getElementById('btn-register');
 const btnLogin = document.getElementById('btn-login');
+const btnLogout = document.getElementById('btn-logout');
+
 const inputUsername = document.getElementById('username');
+const welcomeMessage = document.getElementById('welcome-message');
+
+let currentLoggedInUser = '';
+
 
 // 3. Hàm hỗ trợ in thông điệp ra Live Security Inspector
 export function logToInspector(message, isReset = false) {
@@ -31,14 +40,45 @@ export function logToInspector(message, isReset = false) {
 }
 
 // 4. Hàm khóa/mở nút bấm khi đang thực hiện quét vân tay (tránh người dùng bấm liên tục)
+// function setButtonsLoading(isLoading) {
+//     btnRegister.disabled = isLoading;
+//     btnLogin.disabled = isLoading;
+//     btnRegister.style.opacity = isLoading ? '0.6' : '1';
+//     btnLogin.style.opacity = isLoading ? '0.6' : '1';
+//     btnRegister.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+//     btnLogin.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+// }
+
 function setButtonsLoading(isLoading) {
-    btnRegister.disabled = isLoading;
-    btnLogin.disabled = isLoading;
-    btnRegister.style.opacity = isLoading ? '0.6' : '1';
-    btnLogin.style.opacity = isLoading ? '0.6' : '1';
-    btnRegister.style.cursor = isLoading ? 'not-allowed' : 'pointer';
-    btnLogin.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+    if (btnRegister) {
+        btnRegister.disabled = isLoading;
+        btnRegister.style.opacity = isLoading ? '0.6' : '1';
+        btnRegister.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+    }
+    if (btnLogin) {
+        btnLogin.disabled = isLoading;
+        btnLogin.style.opacity = isLoading ? '0.6' : '1';
+        btnLogin.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+    }
 }
+
+// Hàm chuyển đổi giữa Guest View và Dashboard View
+function switchView(isLoggedIn, username = '') {
+    if (isLoggedIn) {
+        currentLoggedInUser = username;
+        welcomeMessage.innerText = `👋 Xin chào, ${username}!`;
+        guestView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
+    } else {
+        currentLoggedInUser = '';
+        dashboardView.classList.add('hidden');
+        guestView.classList.remove('hidden');
+    }
+}
+// ==========================================
+// BẮT SỰ KIỆN NÚT BẤM
+// ==========================================
+
 
 // ==========================================
 // SỰ KIỆN: BẤM NÚT "ĐĂNG KÝ PASSKEY"
@@ -85,11 +125,23 @@ btnLogin.addEventListener('click', async () => {
         // Ủy thác cho hàm của Huy trong webauthn.js thực hiện, truyền kèm hàm logToInspector
         const result = await handleLogin(username, logToInspector);
         if (result && result.success) {
-            logToInspector("🔓 Đã xác thực danh tính an toàn với FIDO2 Passkey!");
+            logToInspector("🔓 Đã xác thực danh tính an toàn với FIDO2 Passkey!");// Chuyển sang màn hình chào mừng
+            switchView(true, username);
         }
     } catch (error) {
         logToInspector(`❌ Lỗi ngoài ý muốn: ${error.message}`);
     } finally {
         setButtonsLoading(false);
     }
+});
+
+// 3. Nút Đăng xuất
+btnLogout.addEventListener('click', async () => {
+    logToInspector(`[Đăng xuất] Đã đăng xuất tài khoản: ${currentLoggedInUser}`, true);
+    try {
+        await handleLogout(logToInspector);
+    } catch (e) {
+        // Bỏ qua lỗi backend nếu API chưa có
+    }
+    switchView(false);
 });
