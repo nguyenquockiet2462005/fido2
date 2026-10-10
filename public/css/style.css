@@ -138,3 +138,15 @@ pre {
     margin-top: 24px;
     color: var(--text-muted);
 }
+
+button#btn-dashboard {
+    width: 100%;
+    background: #8b5cf6;
+    color: white;
+    padding: 12px 16px;
+    font-size: 0.95rem;
+}
+
+button#btn-dashboard:hover {
+    background: #7c3aed;
+}
