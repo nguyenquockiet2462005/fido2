@@ -51,6 +51,13 @@ router.post('/register-options', async (req, res) => {
   // Tìm hồ sơ trong cơ sở dữ liệu, nếu chưa có thì tạo mới
   let user = findUserByUsername(username);
 
+  // NẾU ĐÃ CÓ TÀI KHOẢN VÀ ĐÃ CÓ PASSKEY -> CHẶN KHÔNG CHO ĐĂNG KÝ TIẾP
+  if (user && user.credentials && user.credentials.length > 0) {
+    return res.status(400).json({
+      error: 'Tên tài khoản này đã được đăng ký! Vui lòng chọn tên khác hoặc bấm Đăng nhập.'
+    });
+  }
+
   if (!user) {
     user = createUser(username);
   }
