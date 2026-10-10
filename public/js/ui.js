@@ -1,88 +1,95 @@
 /**
- * public/js/ui.js - TRÌNH ĐIỀU KHIỂN GIAO DIỆN & LIVE INSPECTOR
+ * public/js/ui.js - KHÔNG GIAN LÀM VIỆC CỦA THÀNH VIÊN 4 (UI Controller & Inspector)
+ * 
+ * ==============================================================================
+ * VAI TRÒ CHÍNH:
+ * 1. Quản lý DOM (bắt sự kiện nút bấm, đọc input username, vô hiệu hóa nút khi xử lý).
+ * 2. Gọi các hàm nghiệp vụ FIDO2 do Thành viên 3 (Huy) phụ trách trong `webauthn.js`.
+ * 3. Hiển thị thông báo và tiến trình trực quan trên màn hình Live Security Inspector.
+ * ==============================================================================
  */
 
-import { handleRegister, handleLogin, handleLogout } from './webauthn.js';
+// 1. Nhập (Import) 2 hàm xử lý FIDO2 từ file của Thành viên 3 (Huy)
+import { handleRegister, handleLogin } from './webauthn.js';
 
-// Các phần tử Giao diện
+// 2. Lấy các phần tử giao diện từ DOM
 const outputLog = document.getElementById('outputLog');
-const guestView = document.getElementById('guest-view');
-const dashboardView = document.getElementById('dashboard-view');
-
 const btnRegister = document.getElementById('btn-register');
 const btnLogin = document.getElementById('btn-login');
-const btnLogout = document.getElementById('btn-logout');
-
 const inputUsername = document.getElementById('username');
-const welcomeMessage = document.getElementById('welcome-message');
 
-let currentLoggedInUser = '';
-
-// Hàm ghi log vào Live Inspector
-function logToInspector(message, isReset = false) {
+// 3. Hàm hỗ trợ in thông điệp ra Live Security Inspector
+export function logToInspector(message, isReset = false) {
+    if (!outputLog) return;
     if (isReset) {
         outputLog.innerText = message + '\n';
     } else {
         outputLog.innerText += message + '\n';
     }
+    // Tự động cuộn xuống dòng mới nhất
     outputLog.scrollTop = outputLog.scrollHeight;
 }
 
-// Hàm chuyển đổi giữa Guest View và Dashboard View
-function switchView(isLoggedIn, username = '') {
-    if (isLoggedIn) {
-        currentLoggedInUser = username;
-        welcomeMessage.innerText = `👋 Xin chào, ${username}!`;
-        guestView.classList.add('hidden');
-        dashboardView.classList.remove('hidden');
-    } else {
-        currentLoggedInUser = '';
-        dashboardView.classList.add('hidden');
-        guestView.classList.remove('hidden');
-    }
+// 4. Hàm khóa/mở nút bấm khi đang thực hiện quét vân tay (tránh người dùng bấm liên tục)
+function setButtonsLoading(isLoading) {
+    btnRegister.disabled = isLoading;
+    btnLogin.disabled = isLoading;
+    btnRegister.style.opacity = isLoading ? '0.6' : '1';
+    btnLogin.style.opacity = isLoading ? '0.6' : '1';
+    btnRegister.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+    btnLogin.style.cursor = isLoading ? 'not-allowed' : 'pointer';
 }
 
 // ==========================================
-// BẮT SỰ KIỆN NÚT BẤM
+// SỰ KIỆN: BẤM NÚT "ĐĂNG KÝ PASSKEY"
 // ==========================================
-
-// 1. Nút Đăng ký Passkey
 btnRegister.addEventListener('click', async () => {
     const username = inputUsername.value.trim();
-    if (!username) return alert("Vui lòng nhập tên người dùng!");
+    if (!username) {
+        alert("Vui lòng nhập tên người dùng!");
+        inputUsername.focus();
+        return;
+    }
 
     logToInspector(`[Đăng ký] Bắt đầu tạo Passkey cho tài khoản: ${username}`, true);
-    const result = await handleRegister(username, logToInspector);
+    setButtonsLoading(true);
 
-    if (result && result.success) {
-        alert("Đăng ký Passkey thành công! Bây giờ bạn có thể bấm Đăng nhập.");
+    try {
+        // Ủy thác cho hàm của Huy trong webauthn.js thực hiện, truyền kèm hàm logToInspector
+        const result = await handleRegister(username, logToInspector);
+        if (result && result.success) {
+            logToInspector("🎉 Chúc mừng! Bạn có thể thử Đăng nhập ngay bây giờ.");
+        }
+    } catch (error) {
+        logToInspector(`❌ Lỗi ngoài ý muốn: ${error.message}`);
+    } finally {
+        setButtonsLoading(false);
     }
 });
 
-// 2. Nút Đăng nhập Passkey
+// ==========================================
+// SỰ KIỆN: BẤM NÚT "ĐĂNG NHẬP PASSKEY"
+// ==========================================
 btnLogin.addEventListener('click', async () => {
     const username = inputUsername.value.trim();
-    if (!username) return alert("Vui lòng nhập tên người dùng!");
+    if (!username) {
+        alert("Vui lòng nhập tên người dùng!");
+        inputUsername.focus();
+        return;
+    }
 
     logToInspector(`[Đăng nhập] Bắt đầu xác thực cho tài khoản: ${username}`, true);
-    const result = await handleLogin(username, logToInspector);
+    setButtonsLoading(true);
 
-    if (result && result.success) {
-        switchView(true, username);
-    }
-});
-
-// 3. Nút Đăng xuất khỏi tài khoản (Quay về màn hình Trang khách lập tức)
-btnLogout.addEventListener('click', async () => {
-    logToInspector(`[Đăng xuất] Đã đăng xuất tài khoản: ${currentLoggedInUser}`, true);
-    
-    // Gọi hàm logout an toàn (nếu backend hỗ trợ)
     try {
-        await handleLogout(logToInspector);
-    } catch (e) {
-        // Bỏ qua lỗi backend nếu không có API
+        // Ủy thác cho hàm của Huy trong webauthn.js thực hiện, truyền kèm hàm logToInspector
+        const result = await handleLogin(username, logToInspector);
+        if (result && result.success) {
+            logToInspector("🔓 Đã xác thực danh tính an toàn với FIDO2 Passkey!");
+        }
+    } catch (error) {
+        logToInspector(`❌ Lỗi ngoài ý muốn: ${error.message}`);
+    } finally {
+        setButtonsLoading(false);
     }
-
-    // Ép chuyển ngay lập tức về giao diện Guest ban đầu
-    switchView(false);
 });

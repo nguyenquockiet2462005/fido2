@@ -1,223 +1,140 @@
-/* ==========================================================================
-   CSS DÙNG CHUNG - QUẢN LÝ THIẾT KẾ TẬP TRUNG (CSS VARIABLES)
-   ========================================================================== */
+/**
+ * public/css/style.css - KHÔNG GIAN THIẾT KẾ CỦA THÀNH VIÊN 4 (UI/UX)
+ */
+
 :root {
-  --bg-color: #0f172a;
-  --card-bg: #1e293b;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --primary: #38bdf8;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
-  --border: #334155;
-  --input-bg: #090d16;
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --border-radius-sm: 6px;
-  --border-radius-md: 8px;
-  --border-radius-lg: 12px;
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --primary: #38bdf8;
+    --success: #22c55e;
+    --border: #334155;
+    --input-bg: #090d16;
 }
 
 body {
-  font-family: var(--font-family);
-  background-color: var(--bg-color);
-  color: var(--text-main);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  margin: 0;
-  padding: 20px;
-  box-sizing: border-box;
-}
-
-p {
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-/* Class dùng chung để ẩn/hiện giao diện Dashboard */
-.hidden {
-  display: none !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 .card {
-  background-color: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-lg);
-  padding: 32px;
-  max-width: 600px;
-  width: 100%;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 600px;
+    width: 100%;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
 h1 {
-  font-size: 1.5rem;
-  color: var(--primary);
-  margin-top: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+    font-size: 1.5rem;
+    color: var(--primary);
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+p {
+    color: var(--text-muted);
+    line-height: 1.6;
 }
 
 .status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: rgba(34, 197, 94, 0.15);
-  color: var(--success);
-  border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success);
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 20px;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--success);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
 }
 
+/* Định dạng cho ô nhập tên */
 .input-group {
-  margin: 20px 0 10px 0;
+    margin: 20px 0 10px 0;
 }
 
 input[type="text"] {
-  background: var(--input-bg);
-  color: var(--text-main);
-  border: 1px solid var(--border);
-  padding: 10px 16px;
-  border-radius: var(--border-radius-sm);
-  font-size: 1rem;
-  width: 100%;
-  box-sizing: border-box;
-  outline: none;
+    background: var(--input-bg);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
 }
 
 input[type="text"]:focus {
-  border-color: var(--primary);
+    border-color: var(--primary);
 }
 
 .btn-group {
-  display: flex;
-  gap: 12px;
-  margin: 15px 0 20px 0;
+    display: flex;
+    gap: 12px;
+    margin: 15px 0 20px 0;
 }
 
 button {
-  flex: 1;
-  background: var(--primary);
-  color: #0f172a;
-  border: none;
-  padding: 12px 16px;
-  border-radius: var(--border-radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s, background-color 0.2s;
+    flex: 1;
+    background: var(--primary);
+    color: #0f172a;
+    border: none;
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
 }
 
 button:hover {
-  opacity: 0.9;
+    opacity: 0.9;
 }
 
+/* Nút đăng nhập màu xanh lá */
 button#btn-login {
-  background: var(--success);
-  color: white;
+    background: var(--success);
+    color: white;
 }
 
-button.btn-danger {
-  background: var(--danger);
-  color: white;
-}
-
-button.btn-danger:hover {
-  background: var(--danger-hover);
-}
-
-/* ==========================================
-   STYLE MÀN HÌNH DASHBOARD VIEW
-   ========================================== */
-.user-profile {
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid var(--primary);
-  border-radius: var(--border-radius-md);
-  padding: 16px;
-  margin-bottom: 20px;
-}
-
-.user-profile h2 {
-  margin: 0 0 6px 0;
-  font-size: 1.25rem;
-  color: var(--primary);
-}
-
-.passkey-section {
-  margin: 20px 0;
-}
-
-.passkey-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.passkey-header h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--text-main);
-}
-
-.passkey-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.passkey-item {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-sm);
-  padding: 12px;
-  font-size: 0.85rem;
-}
-
-.passkey-item .key-id {
-  font-weight: bold;
-  color: var(--primary);
-  word-break: break-all;
-}
-
-.passkey-item .key-meta {
-  color: var(--text-muted);
-  margin-top: 4px;
-  display: flex;
-  justify-content: space-between;
-}
-
-/* ==========================================
-   LIVE INSPECTOR
-   ========================================== */
 pre {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-md);
-  padding: 16px;
-  overflow-x: auto;
-  font-size: 0.9rem;
-  color: var(--primary);
-  height: 140px;
-  line-height: 1.5;
+    background: #090d16;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    color: #38bdf8;
+    height: 150px;
+    line-height: 1.5;
 }
 
 .footer-note {
-  font-size: 0.85rem;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  margin-top: 24px;
-  color: var(--text-muted);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: 24px;
+    color: var(--text-muted);
 }
