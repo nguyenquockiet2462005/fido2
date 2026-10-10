@@ -17,25 +17,40 @@
 <body>
 
   <div class="card">
-    <div class="status-badge">
-      <span class="status-dot"></span> Server đã kết nối sẵn sàng!
+
+    <!-- 1. MÀN HÌNH KHÁCH (GUEST VIEW) -->
+    <div id="guest-view">
+      <div class="status-badge">
+        <span class="status-dot"></span> Server đã kết nối sẵn sàng!
+      </div>
+
+      <h1>🔑 FIDO2 / WebAuthn Demo</h1>
+      <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
+
+      <div class="input-group">
+        <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
+      </div>
+
+      <div class="btn-group">
+        <button id="btn-register">Đăng ký Passkey</button>
+        <button id="btn-login">Đăng nhập Passkey</button>
+      </div>
     </div>
 
-    <h1>FIDO2 / WebAuthn Demo</h1>
-    <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
+    <!-- 2. MÀN HÌNH ĐÃ ĐĂNG NHẬP (DASHBOARD VIEW) -->
+    <div id="dashboard-view" class="hidden">
+      <div class="user-profile">
+        <h2 id="welcome-message">👋 Xin chào!</h2>
+        <p style="margin: 0; font-size: 0.9rem;">Bạn đã đăng nhập thành công bằng thiết bị Passkey an toàn.</p>
+      </div>
 
-    <!-- Ô nhập Username và các Nút bấm -->
-    <div class="input-group">
-      <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
-    </div>
-
-    <div class="btn-group">
-      <button id="btn-register">Đăng ký Passkey</button>
-      <button id="btn-login">Đăng nhập Passkey</button>
+      <div style="margin-top: 20px;">
+        <button id="btn-logout" class="btn-danger">Đăng xuất khỏi tài khoản</button>
+      </div>
     </div>
 
     <!-- Màn hình Live Inspector -->
-    <div>
+    <div style="margin-top: 24px;">
       <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
       <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
     </div>
@@ -43,11 +58,17 @@
     <div class="footer-note">
       <strong>Bước tiếp theo:</strong> Theo dõi luồng dữ liệu trao đổi giữa Client và Server trên màn hình Inspector.
     </div>
+
+    <!-- Nút sang trang Dashboard quản trị riêng biệt -->
+    <div style="margin-top: 16px; text-align: center;">
+      <button id="btn-dashboard" onclick="window.location.href='dashboard.html'">
+        Dashboard Quản Trị ➡
+      </button>
+    </div>
   </div>
 
-  <!-- Liên kết phần giao diện này với file JS xử lý sự kiện -->
-  <!-- <script src="js/ui.js"></script> -->
   <script type="module" src="js/ui.js"></script>
+
 </body>
 
 </html>

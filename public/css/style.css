@@ -9,9 +9,20 @@
     --text-muted: #94a3b8;
     --primary: #38bdf8;
     --success: #22c55e;
+    --danger: #ef4444;
+    /* Mới: màu đỏ cho nút đăng xuất */
+    --danger-hover: #dc2626;
+    /* Mới: màu đỏ khi hover */
     --border: #334155;
     --input-bg: #090d16;
+    --border-radius-sm: 6px;
+    /* Mới */
+    --border-radius-md: 8px;
+    /* Mới */
+    --border-radius-lg: 12px;
+    /* Mới */
 }
+
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -137,4 +148,47 @@ pre {
     padding-top: 16px;
     margin-top: 24px;
     color: var(--text-muted);
+}
+
+/* Nút dashboard */
+button#btn-dashboard {
+    width: 100%;
+    background: #8b5cf6;
+    color: white;
+    padding: 12px 16px;
+    font-size: 0.95rem;
+}
+
+button#btn-dashboard:hover {
+    background: #7c3aed;
+}
+
+/* Class dùng để ẩn màn hình đăng nhập hoặc màn hình chào mừng */
+.hidden {
+    display: none !important;
+}
+
+/* Nút Đăng xuất màu đỏ */
+button.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+button.btn-danger:hover {
+    background: var(--danger-hover);
+}
+
+/* Khung chào mừng sau khi đăng nhập thành công */
+.user-profile {
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid var(--primary);
+    border-radius: var(--border-radius-md);
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.user-profile h2 {
+    margin: 0 0 6px 0;
+    font-size: 1.25rem;
+    color: var(--primary);
 }
