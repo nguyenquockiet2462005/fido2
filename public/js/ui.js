@@ -100,28 +100,31 @@ function setButtonsLoading(isLoading) {
 const splitWrapper = document.querySelector('.split-wrapper');
 
 /**
- * Chuyển đổi qua lại giữa màn hình Khách và Dashboard
+ * Chuyển đổi qua lại giữa màn hình Khách (Guest) và Dashboard
+ * @param {boolean} isLoggedIn - Trạng thái đã đăng nhập hay chưa (true/false)
+ * @param {string} username - Tên tài khoản
  */
 function switchView(isLoggedIn, username = '') {
+    // 1. Tìm thẻ cha chứa toàn bộ giao diện
+    const splitWrapper = document.querySelector('.split-wrapper');
     if (isLoggedIn) {
         currentLoggedInUser = username;
-        if (welcomeMessage) welcomeMessage.innerText = `Xin chào, ${username}!`;
-        if (guestView) guestView.classList.add('hidden');
-        if (dashboardView) dashboardView.classList.remove('hidden');
-        
-        // Ẩn khung bên trái, mở rộng khung bên phải
-        if (splitWrapper) splitWrapper.classList.add('dashboard-active');
+        // 👉 KHI ĐĂNG NHẬP THÀNH CÔNG: Gắn class "logged-in" vào thẻ cha
+        if (splitWrapper) splitWrapper.classList.add('logged-in');
+        if (welcomeMessage) welcomeMessage.innerText = `👋 Xin chào, ${username}!`;
+        guestView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
 
+        // Tải thông tin sinh viên lên thẻ
         loadUserProfile();
     } else {
         currentLoggedInUser = '';
-        if (dashboardView) dashboardView.classList.add('hidden');
-        if (guestView) guestView.classList.remove('hidden');
+        // 👉 KHI ĐĂNG XUẤT: Gỡ bỏ class "logged-in" để quay về giao diện 2 cột ban đầu
+        if (splitWrapper) splitWrapper.classList.remove('logged-in');
+        dashboardView.classList.add('hidden');
+        guestView.classList.remove('hidden');
         if (inputUsername) inputUsername.value = '';
         if (inlinePopup) inlinePopup.classList.add('hidden');
-        
-        // Hiện lại khung bên trái khi đăng xuất
-        if (splitWrapper) splitWrapper.classList.remove('dashboard-active');
     }
 }
 
@@ -366,3 +369,25 @@ if (btnUnlinkCard) {
         }
     });
 }
+
+// ==========================================
+// TỰ ĐỘNG KHÔI PHỤC PHIÊN ĐĂNG NHẬP KHI TẢI LẠI TRANG (F5)
+// ==========================================
+async function checkCurrentSession() {
+    try {
+        // Hỏi Server xem cookie phiên hiện tại có user nào đang đăng nhập không
+        const res = await fetch('/api/user/profile');
+        if (res.ok) {
+            const data = await res.json();
+            // Nếu có user đang đăng nhập -> Chuyển thẳng vào Dashboard luôn
+            if (data && data.username) {
+                switchView(true, data.username);
+            }
+        }
+    } catch (e) {
+        // Nếu chưa đăng nhập hoặc lỗi mạng, giữ nguyên màn hình đăng nhập (guestView)
+    }
+}
+
+// Chạy hàm kiểm tra ngay khi mở trang web
+checkCurrentSession();
