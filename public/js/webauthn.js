@@ -102,7 +102,7 @@ export async function handleLogin(username, logCallback) {
         }
         if (optionsJSON.error) throw new Error(optionsJSON.error);
         
-        log("🟢 Đang yêu cầu chạm vân tay / Windows Hello...", optionsJSON);
+        log("🟢 Đang yêu cầu xác thực...", optionsJSON);
         
         let asseResp;
         try {

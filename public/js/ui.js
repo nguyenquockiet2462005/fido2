@@ -42,9 +42,9 @@ let currentLoggedInUser = '';
 let popupTimer = null;
 
 /**
- * Hiển thị bảng Pop-up nhỏ ngay dưới 2 nút bấm
+ * Hiển thị bảng Pop-up nhỏ ngay dưới 2 nút bấm (Đã xóa bỏ icon)
  */
-export function showInlinePopup(type, icon, text, autoHideMs = 3000) {
+export function showInlinePopup(type, text, autoHideMs = 3000) {
     if (!inlinePopup) return;
 
     if (popupTimer) clearTimeout(popupTimer);
@@ -53,7 +53,7 @@ export function showInlinePopup(type, icon, text, autoHideMs = 3000) {
     void inlinePopup.offsetWidth; // Kích hoạt reflow animation
 
     inlinePopup.classList.add(`popup-${type}`);
-    if (inlinePopupIcon) inlinePopupIcon.innerText = icon;
+    if (inlinePopupIcon) inlinePopupIcon.innerText = ''; // Ẩn hoàn toàn icon
     if (inlinePopupText) inlinePopupText.innerText = text;
 
     if (autoHideMs > 0) {
@@ -76,15 +76,15 @@ export function logToInspector(message, isReset = false) {
         outputLog.scrollTop = outputLog.scrollHeight;
     }
 
-    // Nếu đang ở màn hình đăng nhập, cập nhật pop-up nhỏ
+    // Nếu đang ở màn hình đăng nhập, cập nhật pop-up nhỏ không kèm icon
     if (guestView && !guestView.classList.contains('hidden')) {
         const cleanText = message.replace(/^[❌✅🎉🔓🟡🟢🔵⚠️]+\s*/, '');
         if (message.includes('❌')) {
-            showInlinePopup('error', '❌', cleanText, 4000);
+            showInlinePopup('error', cleanText, 4000);
         } else if (message.includes('✅') || message.includes('🎉') || message.includes('🔓')) {
-            showInlinePopup('success', '✅', cleanText, 2500);
+            showInlinePopup('success', cleanText, 2500);
         } else {
-            showInlinePopup('info', '⏳', cleanText, 0);
+            showInlinePopup('info', cleanText, 0);
         }
     }
 }
@@ -97,19 +97,31 @@ function setButtonsLoading(isLoading) {
 /**
  * Chuyển đổi qua lại giữa màn hình Khách và Dashboard
  */
+const splitWrapper = document.querySelector('.split-wrapper');
+
+/**
+ * Chuyển đổi qua lại giữa màn hình Khách và Dashboard
+ */
 function switchView(isLoggedIn, username = '') {
     if (isLoggedIn) {
         currentLoggedInUser = username;
-        if (welcomeMessage) welcomeMessage.innerText = `👋 Xin chào, ${username}!`;
-        guestView.classList.add('hidden');
-        dashboardView.classList.remove('hidden');
+        if (welcomeMessage) welcomeMessage.innerText = `Xin chào, ${username}!`;
+        if (guestView) guestView.classList.add('hidden');
+        if (dashboardView) dashboardView.classList.remove('hidden');
+        
+        // Ẩn khung bên trái, mở rộng khung bên phải
+        if (splitWrapper) splitWrapper.classList.add('dashboard-active');
+
         loadUserProfile();
     } else {
         currentLoggedInUser = '';
-        dashboardView.classList.add('hidden');
-        guestView.classList.remove('hidden');
+        if (dashboardView) dashboardView.classList.add('hidden');
+        if (guestView) guestView.classList.remove('hidden');
         if (inputUsername) inputUsername.value = '';
         if (inlinePopup) inlinePopup.classList.add('hidden');
+        
+        // Hiện lại khung bên trái khi đăng xuất
+        if (splitWrapper) splitWrapper.classList.remove('dashboard-active');
     }
 }
 
@@ -136,7 +148,7 @@ async function loadUserProfile() {
                 studentCard.classList.remove('unverified');
                 studentCard.classList.add('verified');
             }
-            if (btnScanCard) btnScanCard.innerText = '📷 Quét lại thẻ để cập nhật thông tin';
+            if (btnScanCard) btnScanCard.innerText = 'Quét lại thẻ để cập nhật thông tin';
             if (btnUnlinkCard) btnUnlinkCard.style.display = 'block';
 
             if (rowYear) {
@@ -153,7 +165,7 @@ async function loadUserProfile() {
                 studentCard.classList.remove('verified');
                 studentCard.classList.add('unverified');
             }
-            if (btnScanCard) btnScanCard.innerText = '📷 Quét Thẻ Sinh Viên';
+            if (btnScanCard) btnScanCard.innerText = 'Quét Thẻ Sinh Viên';
             if (btnUnlinkCard) btnUnlinkCard.style.display = 'none';
 
             if (rowYear) {
@@ -180,7 +192,7 @@ if (btnRegister) {
         const ngaySinh = inputNgaySinh ? inputNgaySinh.value.trim() : '';
 
         if (!username) {
-            showInlinePopup('error', '⚠️', 'Vui lòng nhập Username (MSSV)!', 3000);
+            showInlinePopup('error', 'Vui lòng nhập Username (MSSV)!', 3000);
             if (inputUsername) inputUsername.focus();
             return;
         }
@@ -191,14 +203,18 @@ if (btnRegister) {
 
             if (result && result.success) {
                 btnRegister.classList.add('btn-success-pop');
-                showInlinePopup('success', '🎉', 'Đã đăng ký thành công! Hãy bấm Login.', 3000);
+                showInlinePopup('success', 'Đã đăng ký thành công! Hãy bấm Login.', 3000);
 
                 setTimeout(() => {
                     btnRegister.classList.remove('btn-success-pop');
                 }, 1500);
             }
         } catch (error) {
-            showInlinePopup('error', '❌', `Lỗi: ${error.message}`, 4000);
+            let errorMsg = error.message;
+            if (errorMsg.includes('timed out') || errorMsg.includes('not allowed')) {
+                errorMsg = "Không Thể Mở Windows Hello hoặc Vân Tay vui lòng kiểm tra lại";
+            }
+            showInlinePopup('error', errorMsg, 4000);
         } finally {
             setButtonsLoading(false);
         }
@@ -212,7 +228,7 @@ if (btnLogin) {
     btnLogin.addEventListener('click', async () => {
         const username = inputUsername ? inputUsername.value.trim() : '';
         if (!username) {
-            showInlinePopup('error', '⚠️', 'Vui lòng nhập Username (MSSV)!', 3000);
+            showInlinePopup('error', 'Vui lòng nhập Username (MSSV)!', 3000);
             if (inputUsername) inputUsername.focus();
             return;
         }
@@ -222,7 +238,7 @@ if (btnLogin) {
             const result = await handleLogin(username, logToInspector);
             if (result && result.success) {
                 btnLogin.classList.add('btn-success-pop');
-                showInlinePopup('success', '✅', 'Đăng nhập thành công!', 2000);
+                showInlinePopup('success', 'Đăng nhập thành công!', 2000);
 
                 setTimeout(() => {
                     btnLogin.classList.remove('btn-success-pop');
@@ -230,7 +246,11 @@ if (btnLogin) {
                 }, 1200);
             }
         } catch (error) {
-            showInlinePopup('error', '❌', `Lỗi: ${error.message}`, 4000);
+            let errorMsg = error.message;
+            if (errorMsg.includes('timed out') || errorMsg.includes('not allowed')) {
+                errorMsg = "Không Thể Mở Windows Hello hoặc Vân Tay vui lòng kiểm tra lại";
+            }
+            showInlinePopup('error', errorMsg, 4000);
         } finally {
             setButtonsLoading(false);
         }
@@ -267,7 +287,7 @@ if (btnScanCard && cardFileInput) {
         logToInspector(`[DUAL-SCAN] Bắt đầu phân tích hình ảnh thẻ: ${file.name}...`, true);
         btnScanCard.disabled = true;
         const oldText = btnScanCard.innerText;
-        btnScanCard.innerText = "⏳ Đang quét thẻ sinh viên...";
+        btnScanCard.innerText = "Đang quét thẻ sinh viên...";
 
         try {
             const scanResult = await scanStudentCardDual(file, logToInspector);
@@ -277,7 +297,7 @@ if (btnScanCard && cardFileInput) {
             }
 
             logToInspector(`[KẾT QUẢ DUAL-SCAN] MSSV: ${scanResult.studentId} | Họ tên: ${scanResult.fullName || 'N/A'}`);
-            logToInspector("🟡 Đang gửi thông tin thẻ lên máy chủ để liên kết và xác minh danh tính...");
+            logToInspector("Đang gửi thông tin thẻ lên máy chủ để liên kết và xác minh danh tính...");
 
             const response = await fetch('/api/user/profile/verify-card', {
                 method: 'PUT',
@@ -291,16 +311,16 @@ if (btnScanCard && cardFileInput) {
                 throw new Error(data.error || "Không thể xác thực thẻ với hệ thống!");
             }
 
-            logToInspector("✅ [XÁC THỰC THÀNH CÔNG] Đã liên kết Thẻ Sinh Viên HUTECH với tài khoản!");
+            logToInspector("[XÁC THỰC THÀNH CÔNG] Đã liên kết Thẻ Sinh Viên HUTECH với tài khoản!");
             if (data.revokedFakeAccount) {
-                logToInspector(`🚨 [BẢO MẬT] Đã thu hồi tài khoản mạo danh trước đó: ${data.revokedFakeAccount}`);
+                logToInspector(`[BẢO MẬT] Đã thu hồi tài khoản mạo danh trước đó: ${data.revokedFakeAccount}`);
             }
 
             await loadUserProfile();
             alert(`Xác thực thẻ thành công!\nMSSV: ${scanResult.studentId}\nHọ tên: ${scanResult.fullName || ''}`);
 
         } catch (error) {
-            logToInspector(`❌ [LỖI QUÉT THẺ]: ${error.message}`);
+            logToInspector(`[LỖI QUÉT THẺ]: ${error.message}`);
             alert(`Lỗi quét thẻ: ${error.message}`);
         } finally {
             btnScanCard.disabled = false;
@@ -320,22 +340,26 @@ if (btnUnlinkCard) {
 
         btnUnlinkCard.disabled = true;
         const originalText = btnUnlinkCard.innerText;
-        btnUnlinkCard.innerText = "⏳ Đang xác thực sinh trắc học...";
+        btnUnlinkCard.innerText = "Đang xác thực sinh trắc học...";
 
-        logToInspector("🔐 [STEP-UP AUTH] Bắt đầu quy trình xác thực sinh trắc học để hủy liên kết thẻ...", true);
+        logToInspector("[STEP-UP AUTH] Bắt đầu quy trình xác thực sinh trắc học để hủy liên kết thẻ...", true);
 
         try {
             const result = await handleStepUpUnlinkCard(logToInspector);
             if (result.success) {
-                logToInspector("🎉 [HOÀN TẤT] Xác thực thành công! Đã hủy liên kết thẻ sinh viên.");
+                logToInspector("[HOÀN TẤT] Xác thực thành công! Đã hủy liên kết thẻ sinh viên.");
                 await loadUserProfile();
                 alert("Đã hủy liên kết thẻ.");
             } else {
                 throw new Error(result.error || "Xác thực danh tính thất bại. Thẻ sinh viên vẫn được giữ nguyên!");
             }
         } catch (err) {
-            logToInspector(`${err.message}`);
-            alert(`${err.message}`);
+            let errText = err.message;
+            if (errText.includes('timed out') || errText.includes('not allowed')) {
+                errText = "Không Thể Mở Windows Hello hoặc Vân Tay vui lòng kiểm tra lại";
+            }
+            logToInspector(`${errText}`);
+            alert(`${errText}`);
         } finally {
             btnUnlinkCard.disabled = false;
             btnUnlinkCard.innerText = originalText;
