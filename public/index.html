@@ -2,130 +2,184 @@
 <html lang="vi">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FIDO2 / WebAuthn Demo - Kiểm Tra Kết Nối</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIDO2 HUTECH - Đăng Nhập Sinh Viên</title>
+    <link rel="stylesheet" href="css/style.css">
 
-  <!-- Nhúng thư viện WebAuthn để gọi Windows Hello -->
-  <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
-  <!-- 1. Quét mã QR -->
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <!-- 2. Nhận diện chữ OCR tiếng Việt (Tesseract.js) -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <!-- Nhúng file CSS giao diện riêng biệt -->
-  <link rel="stylesheet" href="css/style.css">
-
+    <!-- 1. Thư viện FIDO2 / WebAuthn Browser -->
+    <script src="https://unpkg.com/@simplewebauthn/browser@9.0.1/dist/bundle/index.umd.min.js"></script>
+    <!-- 2. Thư viện Quét mã QR Thẻ -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- 3. Thư viện Nhận diện chữ OCR tiếng Việt (Tesseract.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 
 <body>
+    <!-- KHUNG CHÍNH CHIA ĐÔI MÀN HÌNH (SPLIT SCREEN LAYOUT) -->
+    <div class="split-wrapper">
 
-  <div class="card">
+        <!-- NỬA TRÁI: BANNER MINH HỌA PHI HÀNH GIA & THÔNG ĐIỆP -->
+        <div class="left-panel">
+            <!-- Các quả cầu trang trí không gian -->
+            <div class="planet planet-top"></div>
+            <div class="planet planet-small-1"></div>
+            <div class="planet planet-small-2"></div>
+            <div class="shooting-line line-1"></div>
+            <div class="shooting-line line-2"></div>
 
-    <!-- 1. MÀN HÌNH KHÁCH (GUEST VIEW) -->
-    <div id="guest-view">
-      <div class="status-badge">
-        <span class="status-dot"></span> Server đã kết nối sẵn sàng!
-      </div>
+            <!-- Vòng tròn trung tâm chứa Phi hành gia, Khung Passkey & Logo vô cực -->
+            <div class="illustration-circle">
+                <div class="passkey-bubble">*******</div>
+                <div class="infinity-float">∞</div>
+                <!-- Hình SVG Phi hành gia -->
+                <svg class="astronaut-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M30,140 Q10,110 45,105 T80,125" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round"/>
+                    <rect x="70" y="75" width="60" height="65" rx="14" fill="#cbd5e1"/>
+                    <rect x="78" y="82" width="44" height="52" rx="16" fill="#ffffff"/>
+                    <rect x="88" y="95" width="24" height="16" rx="4" fill="#7c1d54"/>
+                    <circle cx="95" cy="103" r="3" fill="#f97316"/>
+                    <circle cx="105" cy="103" r="3" fill="#38bdf8"/>
+                    <path d="M78,92 Q52,78 46,62" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+                    <path d="M52,70 L48,64" stroke="#f97316" stroke-width="5" stroke-linecap="round"/>
+                    <circle cx="45" cy="60" r="7" fill="#e2e8f0"/>
+                    <path d="M122,92 Q148,82 152,65" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+                    <path d="M148,74 L151,68" stroke="#f97316" stroke-width="5" stroke-linecap="round"/>
+                    <circle cx="153" cy="63" r="7" fill="#e2e8f0"/>
+                    <path d="M88,132 L76,166" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+                    <path d="M82,150 L79,158" stroke="#f97316" stroke-width="5" stroke-linecap="round"/>
+                    <ellipse cx="73" cy="171" rx="9" ry="6" fill="#64748b"/>
+                    <path d="M112,132 L124,160" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+                    <path d="M118,146 L121,154" stroke="#f97316" stroke-width="5" stroke-linecap="round"/>
+                    <ellipse cx="127" cy="165" rx="9" ry="6" fill="#64748b"/>
+                    <circle cx="100" cy="54" r="30" fill="#ffffff"/>
+                    <rect x="78" y="38" width="44" height="30" rx="15" fill="#0f3d5e"/>
+                    <path d="M84,45 Q100,38 114,45" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+                    <circle cx="88" cy="55" r="3" fill="#ffffff" opacity="0.6"/>
+                </svg>
+            </div>
 
-      <h1>🔑 FIDO2 / WebAuthn Demo</h1>
-      <p>Nhập tên người dùng và trải nghiệm luồng đăng ký/đăng nhập sinh trắc học không mật khẩu (Passkey).</p>
-
-      <div class="input-group">
-        <input type="text" id="username" placeholder="Nhập tên đăng nhập (VD: kiet)..." value="demo_user" />
-      </div>
-
-      <div class="btn-group">
-        <button id="btn-register">Đăng ký Passkey</button>
-        <button id="btn-login">Đăng nhập Passkey</button>
-      </div>
-    </div>
-
-    <!-- 2. MÀN HÌNH ĐÃ ĐĂNG NHẬP (HỒ SƠ THẺ SINH VIÊN ĐIỆN TỬ HUTECH) -->
-    <div id="dashboard-view" class="hidden">
-      <!-- Thẻ Sinh Viên HUTECH Kỹ Thuật Số -->
-      <div id="student-card" class="student-card unverified">
-        <!-- Dải thương hiệu HUTECH trên đầu thẻ -->
-        <div class="card-brand">
-          <div class="brand-logo">
-            <span class="brand-hutech">HUTECH</span>
-            <span class="brand-sub">ĐẠI HỌC CÔNG NGHỆ TP.HCM</span>
-          </div>
-          <div class="card-type-label">THẺ SINH VIÊN</div>
+            <div class="hero-caption">
+                <h2>FIDO2 Không Mật Khẩu</h2>
+                <p>Bảo mật sinh trắc học Touch ID / Windows Hello kết hợp xác thực Thẻ Sinh Viên HUTECH</p>
+            </div>
         </div>
 
-        <div class="card-body">
-          <!-- Cột ảnh thẻ & Huy hiệu xác minh -->
-          <div class="card-avatar-col">
-            <img id="card-avatar" class="card-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user"
-              alt="Avatar Sinh Viên" />
-            <span id="card-username" class="card-username">@user</span>
-          </div>
+        <!-- NỬA PHẢI: FORM ĐĂNG NHẬP & DASHBOARD -->
+        <div class="right-panel">
+            <div class="form-container">
 
+                <!-- 1. MÀN HÌNH ĐĂNG NHẬP (GUEST VIEW) -->
+                <div id="guest-view">
+                    <h1 class="welcome-title">Chào Mừng Bạn Đến Với DEMO FIDO2</h1>
+                    <p class="welcome-sub">Vui lòng Đăng Nhập hoặc Đăng Kí để trải nghiệm</p>
 
-          <!-- Cột thông tin chi tiết -->
-          <div class="card-info-col">
-            <div class="info-row">
-              <span class="info-label">Họ tên:</span>
-              <span id="card-fullname" class="info-value highlight">--</span>
+                    <div class="input-group">
+                        <label for="username">Username (MSSV)</label>
+                        <input type="text" id="username" placeholder="Nhập MSSV hoặc Username..." autocomplete="off" />
+                    </div>
+
+                    <!-- Giữ 2 trường ngầm này để đồng bộ linh hoạt với API Backend -->
+                    <input type="hidden" id="hoTen" value="" />
+                    <input type="hidden" id="ngaySinh" value="" />
+
+                    <!-- 2 NÚT LOGIN VÀ SIGN UP CẠNH NHAU -->
+                    <div class="action-buttons">
+                        <button type="button" id="btn-login" class="btn-plum-solid">Login</button>
+                        <button type="button" id="btn-register" class="btn-plum-outline">Sign Up</button>
+                    </div>
+
+                    <!-- BẢNG POP-UP NHỎ HIỆN NGAY DƯỚI 2 NÚT LOGIN & SIGN UP -->
+                    <div id="inline-popup" class="inline-popup hidden">
+                        <span id="inline-popup-icon" class="inline-popup-icon">🔔</span>
+                        <span id="inline-popup-text" class="inline-popup-text">Thông báo</span>
+                    </div>
+                </div>
+
+                <!-- 2. MÀN HÌNH SAU KHI ĐĂNG NHẬP THÀNH CÔNG (DASHBOARD VIEW) -->
+                <div id="dashboard-view" class="hidden">
+                    <h2 id="welcome-message" class="welcome-title" style="font-size: 1.3rem; margin-bottom: 12px;">👋 Xin chào!</h2>
+
+                    <!-- THẺ SINH VIÊN HUTECH KỸ THUẬT SỐ -->
+                    <div id="student-card" class="student-card unverified">
+                        <div class="card-brand">
+                            <div>
+                                <span class="brand-hutech">HUTECH</span>
+                                <span class="brand-sub">ĐẠI HỌC CÔNG NGHỆ TP.HCM</span>
+                            </div>
+                            <div class="card-type-label">THẺ SINH VIÊN</div>
+                        </div>
+
+                        <div class="card-body">
+                            <div class="card-avatar-col">
+                                <img id="card-avatar" class="card-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user" alt="Avatar Sinh Viên" />
+                                <span id="card-username" class="card-username">@user</span>
+                            </div>
+
+                            <div class="card-info-col">
+                                <div class="info-row">
+                                    <span class="info-label">Họ tên:</span>
+                                    <span id="card-fullname" class="info-value highlight">--</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">MSSV:</span>
+                                    <span id="card-mssv" class="info-value code">--</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Ngày sinh:</span>
+                                    <span id="card-dob" class="info-value">--</span>
+                                </div>
+                                <div class="info-row" id="row-year" style="display: none;">
+                                    <span class="info-label">Khóa:</span>
+                                    <span id="card-year" class="info-value">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-footer">
+                            <span id="card-security-status" class="security-text" style="color: var(--text-muted);">Chưa xác thực</span>
+                        </div>
+                    </div>
+
+                    <!-- Khối nút bấm Quét Thẻ & Hủy Thẻ -->
+                    <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+                        <button id="btn-scan-card" class="btn-plum-solid" style="width: 100%; padding: 11px;">
+                            📷 Quét Thẻ Sinh Viên
+                        </button>
+
+                        <button id="btn-unlink-card" type="button" class="btn-unlink" style="display: none;">
+                            Hủy liên kết thẻ
+                        </button>
+
+                        <!-- Input tệp ảnh ẩn (nhận cả camera di động lẫn file ảnh từ máy tính) -->
+                        <input type="file" id="card-file-input" accept="image/*" style="display: none;" />
+                        <div id="qr-hidden-reader" style="position: absolute; left: -9999px; top: -9999px; width: 400px; height: 400px; overflow: hidden; opacity: 0; pointer-events: none;"></div>
+                    </div>
+
+                    <!-- Nút sang trang Dashboard Quản trị & Nút Đăng xuất -->
+                    <div class="action-buttons" style="margin-top: 12px; gap: 8px;">
+                        <a href="dashboard.html" class="btn-plum-outline" style="text-decoration: none; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; padding: 10px;">
+                            🛡️ Quản trị
+                        </a>
+                        <button type="button" id="btn-logout" class="btn-plum-outline" style="font-size: 0.85rem; padding: 10px; color: #ef4444; border-color: #ef4444;">
+                            Đăng xuất
+                        </button>
+                    </div>
+
+                    <!-- Màn hình Live Security Inspector -->
+                    <div class="inspector-box" style="margin-top: 14px;">
+                        <div class="inspector-header">Live Security Inspector:</div>
+                        <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
+                    </div>
+
+                </div>
+
             </div>
-            <div class="info-row">
-              <span class="info-label">MSSV:</span>
-              <span id="card-mssv" class="info-value code">--</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Ngày sinh:</span>
-              <span id="card-dob" class="info-value">--</span>
-            </div>
-            <div class="info-row" id="row-year" style="display: none;">
-              <span class="info-label">Khóa:</span>
-              <span id="card-year" class="info-value">--</span>
-            </div>
-          </div>
         </div>
 
-        <!-- Chân thẻ: Trạng thái chip bảo mật -->
-        <div class="card-footer" style="display: flex; justify-content: flex-end;">
-          <span id="card-security-status" class="security-text"
-            style="color: var(--text-muted); font-size: 0.85rem; font-weight: 600;">Chưa xác thực</span>
-        </div>
-      </div>
-
-      <!-- Khối nút bấm thao tác thẻ & quét Dual-Scan -->
-      <div style="margin-top: 16px;">
-        <button id="btn-scan-card" class="btn-scan">
-          Quét Thẻ Sinh Viên
-        </button>
-        <!-- Input tệp ảnh ẩn (nhận cả camera di động lẫn file ảnh từ máy tính) -->
-        <input type="file" id="card-file-input" accept="image/*" style="display: none;" />
-        <!-- Vùng quét mã QR ngầm cho html5-qrcode -->
-        <div id="qr-hidden-reader" style="display: none;"></div>
-      </div>
-
-      <div style="margin-top: 14px;">
-        <button id="btn-logout" class="btn-danger">Đăng xuất khỏi tài khoản</button>
-      </div>
-
-      <!-- Màn hình Live Inspector -->
-      <div style="margin-top: 24px;">
-        <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
-        <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
-      </div>
-
-      <div class="footer-note">
-        <strong>Bước tiếp theo:</strong> Theo dõi luồng dữ liệu trao đổi giữa Client và Server trên màn hình
-        Inspector.
-      </div>
-
-      <!-- Nút sang trang Dashboard quản trị riêng biệt -->
-      <div style="margin-top: 16px; text-align: center;">
-        <button id="btn-dashboard" onclick="window.location.href='dashboard.html'">
-          Dashboard Quản Trị ➡
-        </button>
-      </div>
     </div>
 
     <script type="module" src="js/ui.js"></script>
-
 </body>
 
 </html>

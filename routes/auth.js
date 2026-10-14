@@ -19,6 +19,7 @@ import {
   addCredentialToUser,
   updateCredentialCounter,
   claimStudentIdentity,
+  unlinkStudentCard,
 } from '../db.js';
 
 // Tạo một trạm phân luồng (Router)
@@ -431,6 +432,150 @@ router.put('/profile/verify-card', (req, res) => {
     });
   }
 });
+
+// 7. API Tạo Challenge Xác thực Sinh trắc học để Hủy liên kết thẻ (Step-Up Auth Options)
+router.post('/profile/unlink-card-options', async (req, res) => {
+  if (!req.session.loggedIn || !req.session.username) {
+    return res.status(401).json({
+      error: 'Vui lòng đăng nhập trước khi thực hiện thao tác này!'
+    });
+  }
+
+  const username = req.session.username;
+  const user = findUserByUsername(username);
+
+  if (!user || !user.credentials || user.credentials.length === 0) {
+    return res.status(400).json({
+      error: 'Tài khoản chưa có Passkey sinh trắc học để xác thực!'
+    });
+  }
+
+  try {
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials: user.credentials.map(dev => ({
+        id: dev.id,
+        type: 'public-key',
+        transports: dev.transports || [],
+      })),
+      userVerification: 'preferred',
+    });
+
+    // Lưu challenge riêng biệt cho phiên hủy thẻ
+    req.session.unlinkChallenge = options.challenge;
+
+    console.log('==========================================');
+    console.log('[HỦY THẺ - BẢO MẬT] Tạo Challenge xác thực');
+    console.log('[HỦY THẺ] Username:', username);
+    console.log('[HỦY THẺ] Challenge:', options.challenge);
+    console.log('==========================================');
+
+    return res.json(options);
+  } catch (error) {
+    console.error('❌ [LỖI TẠO CHALLENGE HỦY THẺ]:', error);
+    return res.status(500).json({
+      error: 'Lỗi hệ thống khi khởi tạo xác thực hủy thẻ.'
+    });
+  }
+});
+
+// 8. API Xác thực Chữ ký Passkey & Hủy liên kết thẻ (Step-Up Auth Verify)
+router.post('/profile/unlink-card-verify', async (req, res) => {
+  if (!req.session.loggedIn || !req.session.username) {
+    return res.status(401).json({
+      error: 'Vui lòng đăng nhập trước khi thực hiện thao tác này!'
+    });
+  }
+
+  const { response } = req.body;
+  const username = req.session.username;
+  const user = findUserByUsername(username);
+
+  if (!user) {
+    return res.status(404).json({
+      error: 'Không tìm thấy tài khoản!'
+    });
+  }
+
+  const expectedChallenge = req.session.unlinkChallenge;
+  if (!expectedChallenge) {
+    return res.status(400).json({
+      error: 'Phiên xác thực đã hết hạn hoặc không hợp lệ. Vui lòng thử lại!'
+    });
+  }
+
+  const userCredentials = user.credentials || [];
+  const currentDevice = userCredentials.find(
+    dev => dev.id === response?.id
+  );
+
+  if (!currentDevice) {
+    return res.status(400).json({
+      error: 'Khóa bảo mật không khớp với thiết bị đã đăng ký!'
+    });
+  }
+
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+      credential: {
+        id: currentDevice.id,
+        publicKey: currentDevice.publicKey,
+        counter: currentDevice.counter,
+        transports: currentDevice.transports || [],
+      },
+    });
+
+    console.log('[HỦY THẺ] Kết quả xác thực Passkey:', verification.verified);
+
+    if (!verification.verified) {
+      return res.status(400).json({
+        success: false,
+        error: 'Xác thực sinh trắc học không thành công!'
+      });
+    }
+
+    // Cập nhật counter chống tấn công phát lại (Replay attack)
+    const { authenticationInfo } = verification;
+    updateCredentialCounter(
+      username,
+      currentDevice.id,
+      authenticationInfo.newCounter
+    );
+
+    // Xóa challenge sau khi dùng
+    req.session.unlinkChallenge = null;
+
+    // Tiến hành hủy liên kết thẻ sinh viên trong database
+    const updatedProfile = unlinkStudentCard(username);
+    console.log(`[HỦY THẺ] ✅ Xác thực thành công! Tài khoản "${username}" đã hủy liên kết thẻ sinh viên.`);
+
+    return res.json({
+      success: true,
+      message: 'Xác thực thành công! Đã hủy liên kết thẻ sinh viên.',
+      profile: updatedProfile
+    });
+
+  } catch (error) {
+    console.error('❌ [LỖI XÁC THỰC HỦY THẺ]:', error);
+    return res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Chặn phương thức DELETE trực tiếp nếu không qua xác thực
+router.delete('/profile/unlink-card', (req, res) => {
+  return res.status(403).json({
+    success: false,
+    error: 'Hành động nhạy cảm: Yêu cầu xác thực sinh trắc học (Passkey) để hủy liên kết thẻ!'
+  });
+});
+
 
 
 export default router;

@@ -1,20 +1,11 @@
 /**
- * public/js/ui.js - KHÔNG GIAN LÀM VIỆC CỦA THÀNH VIÊN 4 (UI Controller & Inspector)
- * 
- * ==============================================================================
- * VAI TRÒ CHÍNH:
- * 1. Quản lý DOM (bắt sự kiện nút bấm, đọc input username, vô hiệu hóa nút khi xử lý).
- * 2. Gọi các hàm nghiệp vụ FIDO2 do Thành viên 3 (Huy) phụ trách trong `webauthn.js`.
- * 3. Hiển thị thông báo và tiến trình trực quan trên màn hình Live Security Inspector.
- * ==============================================================================
+ * public/js/ui.js - Điều Khiển Giao Diện Người Dùng & Đồng Bộ Trạng Thái FIDO2
  */
 
-// 1. Nhập (Import) 2 hàm xử lý FIDO2 từ file của Thành viên 3 (Huy)
-import { handleRegister, handleLogin, handleLogout } from './webauthn.js';
+import { handleRegister, handleLogin, handleLogout, handleStepUpUnlinkCard } from './webauthn.js';
 import { scanStudentCardDual } from './scanner.js';
 
-// 2. Lấy các phần tử giao diện từ DOM
-const outputLog = document.getElementById('outputLog');
+// 1. Lấy các phần tử từ DOM
 const guestView = document.getElementById('guest-view');
 const dashboardView = document.getElementById('dashboard-view');
 
@@ -23,132 +14,108 @@ const btnLogin = document.getElementById('btn-login');
 const btnLogout = document.getElementById('btn-logout');
 
 const inputUsername = document.getElementById('username');
+const inputHoTen = document.getElementById('hoTen');
+const inputNgaySinh = document.getElementById('ngaySinh');
 const welcomeMessage = document.getElementById('welcome-message');
 
-// Các phần tử Thẻ Sinh Viên
+// Bảng Pop-up nhỏ dưới 2 nút Login & Sign Up
+const inlinePopup = document.getElementById('inline-popup');
+const inlinePopupIcon = document.getElementById('inline-popup-icon');
+const inlinePopupText = document.getElementById('inline-popup-text');
+
+// Các phần tử Thẻ Sinh Viên HUTECH
 const studentCard = document.getElementById('student-card');
 const cardAvatar = document.getElementById('card-avatar');
-const cardVerifyBadge = document.getElementById('card-verify-badge');
 const cardFullName = document.getElementById('card-fullname');
 const cardMssv = document.getElementById('card-mssv');
 const cardDob = document.getElementById('card-dob');
 const cardYear = document.getElementById('card-year');
-const cardFaculty = document.getElementById('card-faculty');
+const rowYear = document.getElementById('row-year');
+const cardSecurityStatus = document.getElementById('card-security-status');
 
 const btnScanCard = document.getElementById('btn-scan-card');
+const btnUnlinkCard = document.getElementById('btn-unlink-card');
 const cardFileInput = document.getElementById('card-file-input');
-
+const outputLog = document.getElementById('outputLog');
 
 let currentLoggedInUser = '';
+let popupTimer = null;
 
+/**
+ * Hiển thị bảng Pop-up nhỏ ngay dưới 2 nút bấm
+ */
+export function showInlinePopup(type, icon, text, autoHideMs = 3000) {
+    if (!inlinePopup) return;
 
-// 3. Hàm hỗ trợ in thông điệp ra Live Security Inspector
-export function logToInspector(message, isReset = false) {
-    if (!outputLog) return;
-    if (isReset) {
-        outputLog.innerText = message + '\n';
-    } else {
-        outputLog.innerText += message + '\n';
+    if (popupTimer) clearTimeout(popupTimer);
+
+    inlinePopup.classList.remove('hidden', 'popup-success', 'popup-error', 'popup-info');
+    void inlinePopup.offsetWidth; // Kích hoạt reflow animation
+
+    inlinePopup.classList.add(`popup-${type}`);
+    if (inlinePopupIcon) inlinePopupIcon.innerText = icon;
+    if (inlinePopupText) inlinePopupText.innerText = text;
+
+    if (autoHideMs > 0) {
+        popupTimer = setTimeout(() => {
+            inlinePopup.classList.add('hidden');
+        }, autoHideMs);
     }
-    // Tự động cuộn xuống dòng mới nhất
-    outputLog.scrollTop = outputLog.scrollHeight;
 }
 
-// 4. Hàm khóa/mở nút bấm khi đang thực hiện quét vân tay (tránh người dùng bấm liên tục)
-// function setButtonsLoading(isLoading) {
-//     btnRegister.disabled = isLoading;
-//     btnLogin.disabled = isLoading;
-//     btnRegister.style.opacity = isLoading ? '0.6' : '1';
-//     btnLogin.style.opacity = isLoading ? '0.6' : '1';
-//     btnRegister.style.cursor = isLoading ? 'not-allowed' : 'pointer';
-//     btnLogin.style.cursor = isLoading ? 'not-allowed' : 'pointer';
-// }
+/**
+ * Ghi log vào Live Security Inspector và đồng bộ thông báo Pop-up
+ */
+export function logToInspector(message, isReset = false) {
+    if (outputLog) {
+        if (isReset) {
+            outputLog.innerText = message + '\n';
+        } else {
+            outputLog.innerText += message + '\n';
+        }
+        outputLog.scrollTop = outputLog.scrollHeight;
+    }
+
+    // Nếu đang ở màn hình đăng nhập, cập nhật pop-up nhỏ
+    if (guestView && !guestView.classList.contains('hidden')) {
+        const cleanText = message.replace(/^[❌✅🎉🔓🟡🟢🔵⚠️]+\s*/, '');
+        if (message.includes('❌')) {
+            showInlinePopup('error', '❌', cleanText, 4000);
+        } else if (message.includes('✅') || message.includes('🎉') || message.includes('🔓')) {
+            showInlinePopup('success', '✅', cleanText, 2500);
+        } else {
+            showInlinePopup('info', '⏳', cleanText, 0);
+        }
+    }
+}
 
 function setButtonsLoading(isLoading) {
-    if (btnRegister) {
-        btnRegister.disabled = isLoading;
-        btnRegister.style.opacity = isLoading ? '0.6' : '1';
-        btnRegister.style.cursor = isLoading ? 'not-allowed' : 'pointer';
-    }
-    if (btnLogin) {
-        btnLogin.disabled = isLoading;
-        btnLogin.style.opacity = isLoading ? '0.6' : '1';
-        btnLogin.style.cursor = isLoading ? 'not-allowed' : 'pointer';
+    if (btnRegister) btnRegister.disabled = isLoading;
+    if (btnLogin) btnLogin.disabled = isLoading;
+}
+
+/**
+ * Chuyển đổi qua lại giữa màn hình Khách và Dashboard
+ */
+function switchView(isLoggedIn, username = '') {
+    if (isLoggedIn) {
+        currentLoggedInUser = username;
+        if (welcomeMessage) welcomeMessage.innerText = `👋 Xin chào, ${username}!`;
+        guestView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
+        loadUserProfile();
+    } else {
+        currentLoggedInUser = '';
+        dashboardView.classList.add('hidden');
+        guestView.classList.remove('hidden');
+        if (inputUsername) inputUsername.value = '';
+        if (inlinePopup) inlinePopup.classList.add('hidden');
     }
 }
 
-// ==========================================
-// BẮT SỰ KIỆN NÚT BẤM
-// ==========================================
-
-
-// ==========================================
-// SỰ KIỆN: BẤM NÚT "ĐĂNG KÝ PASSKEY"
-// ==========================================
-btnRegister.addEventListener('click', async () => {
-    const username = inputUsername.value.trim();
-    if (!username) {
-        alert("Vui lòng nhập tên người dùng!");
-        inputUsername.focus();
-        return;
-    }
-
-    logToInspector(`[Đăng ký] Bắt đầu tạo Passkey cho tài khoản: ${username}`, true);
-    setButtonsLoading(true);
-
-    try {
-        // Ủy thác cho hàm của Huy trong webauthn.js thực hiện, truyền kèm hàm logToInspector
-        const result = await handleRegister(username, logToInspector);
-        if (result && result.success) {
-            logToInspector("🎉 Chúc mừng! Bạn có thể thử Đăng nhập ngay bây giờ.");
-        }
-    } catch (error) {
-        logToInspector(`❌ Lỗi ngoài ý muốn: ${error.message}`);
-    } finally {
-        setButtonsLoading(false);
-    }
-});
-
-// ==========================================
-// SỰ KIỆN: BẤM NÚT "ĐĂNG NHẬP PASSKEY"
-// ==========================================
-btnLogin.addEventListener('click', async () => {
-    const username = inputUsername.value.trim();
-    if (!username) {
-        alert("Vui lòng nhập tên người dùng!");
-        inputUsername.focus();
-        return;
-    }
-
-    logToInspector(`[Đăng nhập] Bắt đầu xác thực cho tài khoản: ${username}`, true);
-    setButtonsLoading(true);
-
-    try {
-        // Ủy thác cho hàm của Huy trong webauthn.js thực hiện, truyền kèm hàm logToInspector
-        const result = await handleLogin(username, logToInspector);
-        if (result && result.success) {
-            logToInspector("🔓 Đã xác thực danh tính an toàn với FIDO2 Passkey!");// Chuyển sang màn hình chào mừng
-            switchView(true, username);
-        }
-    } catch (error) {
-        logToInspector(`❌ Lỗi ngoài ý muốn: ${error.message}`);
-    } finally {
-        setButtonsLoading(false);
-    }
-});
-
-// 3. Nút Đăng xuất
-btnLogout.addEventListener('click', async () => {
-    logToInspector(`[Đăng xuất] Đã đăng xuất tài khoản: ${currentLoggedInUser}`, true);
-    try {
-        await handleLogout(logToInspector);
-    } catch (e) {
-        // Bỏ qua lỗi backend nếu API chưa có
-    }
-    switchView(false);
-});
-
-// Hàm gọi API lấy hồ sơ và render lên Thẻ Sinh Viên
+/**
+ * Tải dữ liệu hồ sơ sinh viên từ Backend và hiển thị lên Thẻ
+ */
 async function loadUserProfile() {
     try {
         const res = await fetch('/api/user/profile');
@@ -156,127 +123,222 @@ async function loadUserProfile() {
         const data = await res.json();
         const profile = data.profile || {};
 
-        // 1. Điền tên tài khoản dưới avatar
         const cardUserEl = document.getElementById('card-username');
         if (cardUserEl) cardUserEl.innerText = `@${data.username || currentLoggedInUser}`;
 
-        // 2. Điền thông tin sinh viên
         if (cardFullName) cardFullName.innerText = profile.fullName || data.username;
         if (cardMssv) cardMssv.innerText = profile.studentId || '(Chưa liên kết)';
         if (cardDob) cardDob.innerText = profile.dob || '--/--/----';
         if (cardAvatar && profile.avatar) cardAvatar.src = profile.avatar;
 
-        const rowYear = document.getElementById('row-year');
-        const securityStatus = document.getElementById('card-security-status');
-
-        // 3. Trạng thái xác thực ở góc dưới bên phải
         if (profile.isVerifiedCard) {
-            studentCard.classList.remove('unverified');
-            studentCard.classList.add('verified');
+            if (studentCard) {
+                studentCard.classList.remove('unverified');
+                studentCard.classList.add('verified');
+            }
+            if (btnScanCard) btnScanCard.innerText = '📷 Quét lại thẻ để cập nhật thông tin';
+            if (btnUnlinkCard) btnUnlinkCard.style.display = 'block';
 
-            // Hiện dòng Khóa khi đã xác thực
             if (rowYear) {
                 rowYear.style.display = 'flex';
                 if (cardYear) cardYear.innerText = profile.academicYear || '';
             }
 
-            // Góc dưới bên phải: "Đã xác thực" màu xanh lá
-            if (securityStatus) {
-                securityStatus.innerText = 'Đã xác thực';
-                securityStatus.style.color = 'var(--success)';
+            if (cardSecurityStatus) {
+                cardSecurityStatus.innerText = 'Đã xác thực';
+                cardSecurityStatus.style.color = 'var(--success)';
             }
         } else {
-            studentCard.classList.remove('verified');
-            studentCard.classList.add('unverified');
+            if (studentCard) {
+                studentCard.classList.remove('verified');
+                studentCard.classList.add('unverified');
+            }
+            if (btnScanCard) btnScanCard.innerText = '📷 Quét Thẻ Sinh Viên';
+            if (btnUnlinkCard) btnUnlinkCard.style.display = 'none';
 
-            // Ẩn dòng Khóa khi chưa quét thẻ
             if (rowYear) {
                 rowYear.style.display = 'none';
             }
 
-            // Góc dưới bên phải: "Chưa xác thực" màu xám
-            if (securityStatus) {
-                securityStatus.innerText = 'Chưa xác thực';
-                securityStatus.style.color = 'var(--text-muted)';
+            if (cardSecurityStatus) {
+                cardSecurityStatus.innerText = 'Chưa xác thực';
+                cardSecurityStatus.style.color = 'var(--text-muted)';
             }
         }
     } catch (err) {
-        console.error("Lỗi khi tải hồ sơ:", err);
+        console.error("Lỗi khi tải hồ sơ sinh viên:", err);
     }
 }
 
-
-function switchView(isLoggedIn, username = '') {
-    if (isLoggedIn) {
-        currentLoggedInUser = username;
-        guestView.classList.add('hidden');
-        dashboardView.classList.remove('hidden');
-        // 👉 GỌI TẢI HỒ SƠ LÊN THẺ KHI ĐĂNG NHẬP THÀNH CÔNG:
-        loadUserProfile();
-    } else {
-        currentLoggedInUser = '';
-        dashboardView.classList.add('hidden');
-        guestView.classList.remove('hidden');
-    }
-}
 // ==========================================
-// SỰ KIỆN: QUÉT THẺ SINH VIÊN KÉP (DUAL-SCAN)
+// 1. SỰ KIỆN NÚT "SIGN UP" (ĐĂNG KÝ PASSKEY)
+// ==========================================
+if (btnRegister) {
+    btnRegister.addEventListener('click', async () => {
+        const username = inputUsername ? inputUsername.value.trim() : '';
+        const hoTen = inputHoTen ? inputHoTen.value.trim() : '';
+        const ngaySinh = inputNgaySinh ? inputNgaySinh.value.trim() : '';
+
+        if (!username) {
+            showInlinePopup('error', '⚠️', 'Vui lòng nhập Username (MSSV)!', 3000);
+            if (inputUsername) inputUsername.focus();
+            return;
+        }
+
+        setButtonsLoading(true);
+        try {
+            const result = await handleRegister(username, hoTen, ngaySinh, logToInspector);
+
+            if (result && result.success) {
+                btnRegister.classList.add('btn-success-pop');
+                showInlinePopup('success', '🎉', 'Đã đăng ký thành công! Hãy bấm Login.', 3000);
+
+                setTimeout(() => {
+                    btnRegister.classList.remove('btn-success-pop');
+                }, 1500);
+            }
+        } catch (error) {
+            showInlinePopup('error', '❌', `Lỗi: ${error.message}`, 4000);
+        } finally {
+            setButtonsLoading(false);
+        }
+    });
+}
+
+// ==========================================
+// 2. SỰ KIỆN NÚT "LOGIN" (ĐĂNG NHẬP PASSKEY)
+// ==========================================
+if (btnLogin) {
+    btnLogin.addEventListener('click', async () => {
+        const username = inputUsername ? inputUsername.value.trim() : '';
+        if (!username) {
+            showInlinePopup('error', '⚠️', 'Vui lòng nhập Username (MSSV)!', 3000);
+            if (inputUsername) inputUsername.focus();
+            return;
+        }
+
+        setButtonsLoading(true);
+        try {
+            const result = await handleLogin(username, logToInspector);
+            if (result && result.success) {
+                btnLogin.classList.add('btn-success-pop');
+                showInlinePopup('success', '✅', 'Đăng nhập thành công!', 2000);
+
+                setTimeout(() => {
+                    btnLogin.classList.remove('btn-success-pop');
+                    switchView(true, username);
+                }, 1200);
+            }
+        } catch (error) {
+            showInlinePopup('error', '❌', `Lỗi: ${error.message}`, 4000);
+        } finally {
+            setButtonsLoading(false);
+        }
+    });
+}
+
+// ==========================================
+// 3. SỰ KIỆN NÚT "LOGOUT" (ĐĂNG XUẤT)
+// ==========================================
+if (btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+        logToInspector(`[Đăng xuất] Đã đăng xuất tài khoản: ${currentLoggedInUser}`, true);
+        try {
+            await handleLogout(logToInspector);
+        } catch (e) {
+            // Bỏ qua lỗi
+        }
+        switchView(false);
+    });
+}
+
+// ==========================================
+// 4. SỰ KIỆN: QUÉT THẺ SINH VIÊN KÉP (DUAL-SCAN)
 // ==========================================
 if (btnScanCard && cardFileInput) {
-    // 1. Khi bấm nút, mở cửa sổ chọn ảnh hoặc mở camera
     btnScanCard.addEventListener('click', () => {
         cardFileInput.click();
     });
 
-    // 2. Khi người dùng đã chụp hoặc chọn ảnh thẻ sinh viên HUTECH
     cardFileInput.addEventListener('change', async (event) => {
         const file = event.target.files && event.target.files[0];
         if (!file) return;
 
         logToInspector(`[DUAL-SCAN] Bắt đầu phân tích hình ảnh thẻ: ${file.name}...`, true);
         btnScanCard.disabled = true;
-        btnScanCard.innerText = "Đang quét thẻ sinh viên...";
+        const oldText = btnScanCard.innerText;
+        btnScanCard.innerText = "⏳ Đang quét thẻ sinh viên...";
 
         try {
-            // Bước A: Quét song song QR và OCR từ file
-            const cardData = await scanStudentCardDual(file, (stepMsg) => {
-                logToInspector(stepMsg);
-            });
+            const scanResult = await scanStudentCardDual(file, logToInspector);
 
-            logToInspector(`[KẾT QUẢ QUÉT] MSSV: ${cardData.studentId} | Họ tên: ${cardData.fullName}`);
-            logToInspector("🟡 Đang gửi bằng chứng vật lý lên Server để xác thực chính chủ...");
+            if (!scanResult || !scanResult.studentId) {
+                throw new Error("Không thể bóc tách MSSV từ hình ảnh thẻ!");
+            }
 
-            // Bước B: Gửi dữ liệu thẻ lên Backend
-            const res = await fetch('/api/user/profile/verify-card', {
+            logToInspector(`[KẾT QUẢ DUAL-SCAN] MSSV: ${scanResult.studentId} | Họ tên: ${scanResult.fullName || 'N/A'}`);
+            logToInspector("🟡 Đang gửi thông tin thẻ lên máy chủ để liên kết và xác minh danh tính...");
+
+            const response = await fetch('/api/user/profile/verify-card', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(cardData)
+                body: JSON.stringify(scanResult)
             });
 
-            const resData = await res.json();
+            const data = await response.json();
 
-            if (res.ok && resData.success) {
-                logToInspector("✅ [XÁC THỰC THÀNH CÔNG] Thẻ sinh viên HUTECH đã được gắn vào tài khoản!");
-
-                // Nếu vừa thu hồi từ một tài khoản mạo danh trước đó
-                if (resData.revokedFakeAccount) {
-                    logToInspector(`🚨 [THU HỒI DANH TÍNH] Đã phát hiện và xóa tài khoản mạo danh: "${resData.revokedFakeAccount}"!`);
-                }
-
-                // Tải lại giao diện Thẻ sinh viên sang màu xanh lá chính chủ
-                await loadUserProfile();
-                alert(`Chúc mừng! Thẻ sinh viên ${cardData.studentId} đã được xác thực chính chủ thành công!`);
-            } else {
-                throw new Error(resData.error || "Xác thực thẻ thất bại từ máy chủ.");
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || "Không thể xác thực thẻ với hệ thống!");
             }
+
+            logToInspector("✅ [XÁC THỰC THÀNH CÔNG] Đã liên kết Thẻ Sinh Viên HUTECH với tài khoản!");
+            if (data.revokedFakeAccount) {
+                logToInspector(`🚨 [BẢO MẬT] Đã thu hồi tài khoản mạo danh trước đó: ${data.revokedFakeAccount}`);
+            }
+
+            await loadUserProfile();
+            alert(`Xác thực thẻ thành công!\nMSSV: ${scanResult.studentId}\nHọ tên: ${scanResult.fullName || ''}`);
+
         } catch (error) {
-            logToInspector(`❌ [LỖI XÁC THỰC THẺ]: ${error.message}`);
-            alert(error.message);
+            logToInspector(`❌ [LỖI QUÉT THẺ]: ${error.message}`);
+            alert(`Lỗi quét thẻ: ${error.message}`);
         } finally {
             btnScanCard.disabled = false;
-            btnScanCard.innerText = "Quét Thẻ Sinh Viên";
-            cardFileInput.value = ''; // Reset input để có thể quét lại lần sau
+            btnScanCard.innerText = oldText;
+            cardFileInput.value = '';
         }
     });
 }
 
+// ==========================================
+// 5. SỰ KIỆN: HỦY LIÊN KẾT THẺ (STEP-UP AUTH BẰNG PASSKEY)
+// ==========================================
+if (btnUnlinkCard) {
+    btnUnlinkCard.addEventListener('click', async () => {
+        const confirmUnlink = confirm("Thao tác hủy liên kết thẻ sinh viên yêu cầu xác thực.\n\nBạn có muốn tiếp tục xác thực không?");
+        if (!confirmUnlink) return;
+
+        btnUnlinkCard.disabled = true;
+        const originalText = btnUnlinkCard.innerText;
+        btnUnlinkCard.innerText = "⏳ Đang xác thực sinh trắc học...";
+
+        logToInspector("🔐 [STEP-UP AUTH] Bắt đầu quy trình xác thực sinh trắc học để hủy liên kết thẻ...", true);
+
+        try {
+            const result = await handleStepUpUnlinkCard(logToInspector);
+            if (result.success) {
+                logToInspector("🎉 [HOÀN TẤT] Xác thực thành công! Đã hủy liên kết thẻ sinh viên.");
+                await loadUserProfile();
+                alert("Đã hủy liên kết thẻ.");
+            } else {
+                throw new Error(result.error || "Xác thực danh tính thất bại. Thẻ sinh viên vẫn được giữ nguyên!");
+            }
+        } catch (err) {
+            logToInspector(`${err.message}`);
+            alert(`${err.message}`);
+        } finally {
+            btnUnlinkCard.disabled = false;
+            btnUnlinkCard.innerText = originalText;
+        }
+    });
+}
