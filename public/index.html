@@ -8,7 +8,10 @@
 
   <!-- Nhúng thư viện WebAuthn để gọi Windows Hello -->
   <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
-
+  <!-- 1. Quét mã QR -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <!-- 2. Nhận diện chữ OCR tiếng Việt (Tesseract.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <!-- Nhúng file CSS giao diện riêng biệt -->
   <link rel="stylesheet" href="css/style.css">
 
@@ -37,37 +40,91 @@
       </div>
     </div>
 
-    <!-- 2. MÀN HÌNH ĐÃ ĐĂNG NHẬP (DASHBOARD VIEW) -->
+    <!-- 2. MÀN HÌNH ĐÃ ĐĂNG NHẬP (HỒ SƠ THẺ SINH VIÊN ĐIỆN TỬ HUTECH) -->
     <div id="dashboard-view" class="hidden">
-      <div class="user-profile">
-        <h2 id="welcome-message">👋 Xin chào!</h2>
-        <p style="margin: 0; font-size: 0.9rem;">Bạn đã đăng nhập thành công bằng thiết bị Passkey an toàn.</p>
+      <!-- Thẻ Sinh Viên HUTECH Kỹ Thuật Số -->
+      <div id="student-card" class="student-card unverified">
+        <!-- Dải thương hiệu HUTECH trên đầu thẻ -->
+        <div class="card-brand">
+          <div class="brand-logo">
+            <span class="brand-hutech">HUTECH</span>
+            <span class="brand-sub">ĐẠI HỌC CÔNG NGHỆ TP.HCM</span>
+          </div>
+          <div class="card-type-label">THẺ SINH VIÊN</div>
+        </div>
+
+        <div class="card-body">
+          <!-- Cột ảnh thẻ & Huy hiệu xác minh -->
+          <div class="card-avatar-col">
+            <img id="card-avatar" class="card-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user"
+              alt="Avatar Sinh Viên" />
+            <span id="card-username" class="card-username">@user</span>
+          </div>
+
+
+          <!-- Cột thông tin chi tiết -->
+          <div class="card-info-col">
+            <div class="info-row">
+              <span class="info-label">Họ tên:</span>
+              <span id="card-fullname" class="info-value highlight">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">MSSV:</span>
+              <span id="card-mssv" class="info-value code">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Ngày sinh:</span>
+              <span id="card-dob" class="info-value">--</span>
+            </div>
+            <div class="info-row" id="row-year" style="display: none;">
+              <span class="info-label">Khóa:</span>
+              <span id="card-year" class="info-value">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chân thẻ: Trạng thái chip bảo mật -->
+        <div class="card-footer" style="display: flex; justify-content: flex-end;">
+          <span id="card-security-status" class="security-text"
+            style="color: var(--text-muted); font-size: 0.85rem; font-weight: 600;">Chưa xác thực</span>
+        </div>
       </div>
 
-      <div style="margin-top: 20px;">
+      <!-- Khối nút bấm thao tác thẻ & quét Dual-Scan -->
+      <div style="margin-top: 16px;">
+        <button id="btn-scan-card" class="btn-scan">
+          Quét Thẻ Sinh Viên
+        </button>
+        <!-- Input tệp ảnh ẩn (nhận cả camera di động lẫn file ảnh từ máy tính) -->
+        <input type="file" id="card-file-input" accept="image/*" style="display: none;" />
+        <!-- Vùng quét mã QR ngầm cho html5-qrcode -->
+        <div id="qr-hidden-reader" style="display: none;"></div>
+      </div>
+
+      <div style="margin-top: 14px;">
         <button id="btn-logout" class="btn-danger">Đăng xuất khỏi tài khoản</button>
       </div>
+
+      <!-- Màn hình Live Inspector -->
+      <div style="margin-top: 24px;">
+        <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
+        <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
+      </div>
+
+      <div class="footer-note">
+        <strong>Bước tiếp theo:</strong> Theo dõi luồng dữ liệu trao đổi giữa Client và Server trên màn hình
+        Inspector.
+      </div>
+
+      <!-- Nút sang trang Dashboard quản trị riêng biệt -->
+      <div style="margin-top: 16px; text-align: center;">
+        <button id="btn-dashboard" onclick="window.location.href='dashboard.html'">
+          Dashboard Quản Trị ➡
+        </button>
+      </div>
     </div>
 
-    <!-- Màn hình Live Inspector -->
-    <div style="margin-top: 24px;">
-      <p style="margin-bottom: 6px; font-weight: 500;">Live Security Inspector:</p>
-      <pre id="outputLog">Chưa có hành động nào được thực hiện...</pre>
-    </div>
-
-    <div class="footer-note">
-      <strong>Bước tiếp theo:</strong> Theo dõi luồng dữ liệu trao đổi giữa Client và Server trên màn hình Inspector.
-    </div>
-
-    <!-- Nút sang trang Dashboard quản trị riêng biệt -->
-    <div style="margin-top: 16px; text-align: center;">
-      <button id="btn-dashboard" onclick="window.location.href='dashboard.html'">
-        Dashboard Quản Trị ➡
-      </button>
-    </div>
-  </div>
-
-  <script type="module" src="js/ui.js"></script>
+    <script type="module" src="js/ui.js"></script>
 
 </body>
 

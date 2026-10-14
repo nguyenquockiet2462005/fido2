@@ -116,6 +116,7 @@ app.post('/api/auth/logout', (req, res) => {
 
 // Gắn toàn bộ các API FIDO2 (Đăng ký, Đăng nhập) do Thành viên 2 viết vào tiền tố /api/auth
 app.use('/api/auth', authRoutes);
+app.use('/api/user', authRoutes);
 
 // ==========================================
 // 5. KHỞI ĐỘNG SERVER

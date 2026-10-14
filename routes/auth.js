@@ -18,6 +18,7 @@ import {
   createUser,
   addCredentialToUser,
   updateCredentialCounter,
+  claimStudentIdentity,
 } from '../db.js';
 
 // Tạo một trạm phân luồng (Router)
@@ -354,5 +355,82 @@ router.post('/login-verify', async (req, res) => {
     });
   }
 });
+
+// ==========================================
+// GIAI ĐOẠN 3: HỒ SƠ SINH VIÊN & XÁC THỰC THẺ VẬT LÝ
+// ==========================================
+
+// 5. API Lấy thông tin Hồ sơ cá nhân (Profile) của phiên hiện tại
+router.get('/profile', (req, res) => {
+  if (!req.session.loggedIn || !req.session.username) {
+    return res.status(401).json({
+      error: 'Vui lòng đăng nhập để xem thông tin hồ sơ!'
+    });
+  }
+
+  const user = findUserByUsername(req.session.username);
+  if (!user) {
+    return res.status(404).json({
+      error: 'Không tìm thấy thông tin tài khoản!'
+    });
+  }
+
+  return res.json({
+    username: user.username,
+    role: user.role || 'student',
+    profile: user.profile,
+    credentialsCount: (user.credentials || []).length
+  });
+});
+
+// 6. API Xác thực thẻ sinh viên & Thu hồi tài khoản mạo danh (Physical Proof Claim)
+router.put('/profile/verify-card', (req, res) => {
+  if (!req.session.loggedIn || !req.session.username) {
+    return res.status(401).json({
+      error: 'Vui lòng đăng nhập trước khi xác thực thẻ!'
+    });
+  }
+
+  const { studentId, fullName, dob, academicYear, faculty } = req.body;
+
+  if (!studentId) {
+    return res.status(400).json({
+      error: 'Không tìm thấy Mã số sinh viên (MSSV) hợp lệ từ thẻ!'
+    });
+  }
+
+  try {
+    // Gọi hàm nghiệp vụ cốt lõi đã viết ở Bước 1
+    const result = claimStudentIdentity(req.session.username, {
+      studentId: String(studentId).trim(),
+      fullName: fullName ? String(fullName).trim() : '',
+      dob: dob ? String(dob).trim() : '',
+      academicYear: academicYear ? String(academicYear).trim() : '',
+      faculty: faculty ? String(faculty).trim() : ''
+    });
+
+    console.log('==========================================');
+    console.log('[XÁC THỰC THẺ] Thành công cho user:', req.session.username);
+    console.log('[XÁC THỰC THẺ] MSSV:', studentId);
+    if (result.revokedFakeAccount) {
+      console.log(`[THU HỒI] Đã xóa tài khoản mạo danh: ${result.revokedFakeAccount}`);
+    }
+    console.log('==========================================');
+
+    return res.json({
+      success: true,
+      message: 'Xác thực thẻ sinh viên HUTECH thành công!',
+      profile: result.profile,
+      revokedFakeAccount: result.revokedFakeAccount
+    });
+  } catch (error) {
+    console.error('❌ [LỖI XÁC THỰC THẺ]:', error.message);
+    return res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 
 export default router;

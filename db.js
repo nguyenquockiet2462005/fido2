@@ -61,21 +61,36 @@ function saveUsersToFile() {
     console.error('⚠️ [DB] Lỗi khi lưu dữ liệu ra file:', error.message);
   }
 }
+
+// Hàm nạp dữ liệu từ file JSON vào RAM khi khởi động
 // Hàm nạp dữ liệu từ file JSON vào RAM khi khởi động
 function loadUsersFromFile() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const rawData = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsedUsers = JSON.parse(rawData);
-      // 💡 QUAN TRỌNG: Khôi phục lại kiểu Uint8Array cho publicKey
+
+      // 💡 Migration tự động: Bổ sung role và profile chuẩn nếu tài khoản cũ chưa có
       users = parsedUsers.map(user => ({
         ...user,
+        role: user.role || 'student',
+        profile: {
+          fullName: user.profile?.fullName || user.username,
+          studentId: user.profile?.studentId || '',
+          dob: user.profile?.dob || '',
+          academicYear: user.profile?.academicYear || '',
+          faculty: user.profile?.faculty || '',
+          university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+          isVerifiedCard: user.profile?.isVerifiedCard || false,
+          avatar: user.profile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`,
+          verifiedAt: user.profile?.verifiedAt || null
+        },
         credentials: (user.credentials || []).map(cred => ({
           ...cred,
           publicKey: cred.publicKey ? new Uint8Array(Object.values(cred.publicKey)) : cred.publicKey,
         }))
       }));
-      console.log(`📦 [DB] Đã khôi phục thành công ${users.length} tài khoản từ data/users.json`);
+      console.log(`📦 [DB] Đã khôi phục và chuẩn hóa thành công ${users.length} tài khoản từ data/users.json`);
     } else {
       console.log('📦 [DB] Chưa có file users.json, khởi tạo kho dữ liệu mới.');
     }
@@ -84,6 +99,7 @@ function loadUsersFromFile() {
     users = [];
   }
 }
+
 // Tự động gọi đọc file ngay khi Server bật lên
 loadUsersFromFile();
 
@@ -103,17 +119,30 @@ export function findUserByUsername(username) {
 // 3. || null: Nếu tìm thấy thì trả về thông tin người dùng đó; nếu không tìm thấy ai tên như vậy thì trả về null (nghĩa là rỗng/không tồn tại).
 
 
-//Hàm tạo một người dùng mới và cất vào kho
+// Hàm tạo một người dùng mới và cất vào kho
 export function createUser(username) {
   const newUser = {
-    id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, // tạo một mã id duy nhất cho người dùng (FIDO2 yêu cầu mỗi tài khoảng phải có id riêng)
-    username: username, //tên đăng nhập do người dùng gõ vào (có thể viết ngắn thành: username,)
-    credentials: [], // Khởi tạo mảng chìa khoá rỗng (vì người dùng mới dky, chưa quét vân tay nên chưa có khoá)   
+    id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    username: username,
+    role: username.startsWith('admin') ? 'admin' : 'student',
+    profile: {
+      fullName: username,
+      studentId: '',
+      dob: '',
+      academicYear: '',
+      faculty: '',
+      university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+      isVerifiedCard: false,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+      verifiedAt: null
+    },
+    credentials: [],
   };
   users.push(newUser);
   saveUsersToFile(); // Tự động lưu
   return newUser;
 }
+
 // Giải thích từng chi tiết:
 // id: user_...: Chuẩn FIDO2 quy định mỗi người dùng phải có một userID duy nhất. Chúng ta dùng thời gian hiện tại (Date.now()) kết hợp chuỗi ngẫu nhiên để đảm bảo không bao giờ có 2 người bị trùng ID.
 // credentials: []: Đây là điểm đặc biệt nhất của Passkey! Tài khoản vừa tạo sẽ không có trường password, chỉ có một mảng rỗng sẵn sàng để đón chìa khóa sau khi người dùng quét vân tay.
@@ -199,3 +228,69 @@ export function getAllUsers() {
 // Hàm getAllUsers() để làm gì?
 // Đơn giản là trả về toàn bộ mảng users.
 // Nhóm bạn và Người 4 (UI) có thể gọi hàm này để in danh sách tài khoản ra giao diện web, giúp thầy cô khi chấm bài nhìn thấy tận mắt chiếc chìa khóa (Public Key) vừa được lưu vào RAM như thế nào.
+
+/**
+ * Hàm tìm người dùng theo Mã Số Sinh Viên (MSSV)
+ */
+export function findUserByStudentId(studentId) {
+  if (!studentId) return null;
+  return users.find(u => u.profile && u.profile.studentId === studentId) || null;
+}
+
+/**
+ * HÀM CỐT LÕI: Xác thực & Thu hồi quyền sở hữu danh tính khi có Thẻ Vật Lý
+ * (Physical Proof Ownership & Identity Reclamation)
+ */
+export function claimStudentIdentity(currentUsername, cardData) {
+  const currentUser = findUserByUsername(currentUsername);
+  if (!currentUser) {
+    throw new Error(`Không tìm thấy tài khoản: ${currentUsername}`);
+  }
+
+  const { studentId, fullName, dob, academicYear, faculty } = cardData;
+  if (!studentId) {
+    throw new Error('Thiếu mã số sinh viên (MSSV) hợp lệ từ thẻ!');
+  }
+
+  let revokedFakeAccount = null;
+
+  // 1. Kiểm tra xem MSSV này đã bị tài khoản nào khác đăng ký/chiếm dụng chưa
+  const existingOwner = findUserByStudentId(studentId);
+
+  if (existingOwner && existingOwner.username !== currentUsername) {
+    // Trường hợp A: Tài khoản đó ĐÃ XÁC THỰC THẺ TRƯỚC ĐÓ (isVerifiedCard == true)
+    if (existingOwner.profile && existingOwner.profile.isVerifiedCard) {
+      throw new Error(`Mã số sinh viên ${studentId} đã được kích hoạt bởi tài khoản chính chủ khác (${existingOwner.username})!`);
+    }
+
+    // Trường hợp B: Tài khoản kia CHƯA XÁC THỰC THẺ (isVerifiedCard == false)
+    // ➔ TÀI KHOẢN MẠO DANH / RÁC ➔ THU HỒI & XÓA BỎ KHỎI HỆ THỐNG
+    revokedFakeAccount = existingOwner.username;
+    console.warn(`🚨 [THU HỒI DANH TÍNH] Phát hiện tài khoản mạo danh "${revokedFakeAccount}" chiếm giữ MSSV ${studentId}. Tiến hành xóa bỏ!`);
+
+    // Xóa tài khoản fake khỏi mảng users
+    users = users.filter(u => u.username !== existingOwner.username);
+  }
+
+  // 2. Gán thông tin thẻ chính chủ cho tài khoản hiện tại
+  currentUser.profile = {
+    ...currentUser.profile,
+    fullName: fullName || currentUser.profile.fullName || currentUser.username,
+    studentId: studentId,
+    dob: dob || currentUser.profile.dob || '',
+    academicYear: academicYear || currentUser.profile.academicYear || '',
+    faculty: faculty || currentUser.profile.faculty || '',
+    university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+    isVerifiedCard: true,
+    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${studentId}`,
+    verifiedAt: new Date().toISOString()
+  };
+
+  saveUsersToFile(); // Lưu ngay xuống data/users.json
+
+  return {
+    success: true,
+    profile: currentUser.profile,
+    revokedFakeAccount
+  };
+}
