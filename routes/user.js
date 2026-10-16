@@ -43,6 +43,28 @@ router.get('/profile', (req, res) => {
     });
 });
 
+// 1b. API rút gọn dành cho Workspace Sinh viên
+// Endpoint: GET /api/user/me
+router.get('/me', (req, res) => {
+    if (!req.session.loggedIn || !req.session.username) {
+        return res.status(401).json({ error: 'Chưa đăng nhập!' });
+    }
+
+    const user = findUserByUsername(req.session.username);
+    if (!user) {
+        return res.status(404).json({ error: 'Không tìm thấy tài khoản!' });
+    }
+
+    return res.json({
+        username: user.username,
+        role: user.role || 'student',
+        hoTen: user.profile?.fullName || user.username,
+        ngaySinh: user.profile?.dob || '--/--/----',
+        profile: user.profile,
+        credentialsCount: (user.credentials || []).length
+    });
+});
+
 // 2. API Quét thẻ sinh viên vật lý (Physical Proof Claim)
 // Endpoint: PUT /api/user/profile/verify-card
 router.put('/profile/verify-card', (req, res) => {

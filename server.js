@@ -94,6 +94,28 @@ app.get('/api/users-debug', (req, res) => {
   });
 });
 
+// Route dành riêng cho Admin Dashboard - chỉ cho phép tài khoản có role 'admin'
+app.get('/api/users', (req, res) => {
+  if (!req.session.loggedIn) {
+    return res.status(401).json({ error: 'Chưa đăng nhập!' });
+  }
+  if (req.session.role !== 'admin') {
+    return res.status(403).json({ error: 'Không có quyền Admin!' });
+  }
+  const usersArr = getAllUsers();
+  // Trả về dạng mảng chuẩn với thông tin cần thiết cho Dashboard
+  const sanitized = usersArr.map(u => ({
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    hoTen: u.profile?.fullName || u.username,
+    ngaySinh: u.profile?.dob || '--/--/----',
+    profile: u.profile,
+    credentials: u.credentials,
+  }));
+  res.json(sanitized);
+});
+
 // Route Đăng xuất (Xóa Session)
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy((err) => {

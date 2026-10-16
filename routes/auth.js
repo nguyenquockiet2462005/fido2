@@ -330,15 +330,20 @@ router.post('/login-verify', async (req, res) => {
     req.session.currentChallenge = null;
     req.session.loggedIn = true;
     req.session.username = user.username;
+    req.session.role = user.role || (user.username.startsWith('admin') ? 'admin' : 'student');
 
     console.log('==========================================');
     console.log('[ĐĂNG NHẬP] Đăng nhập thành công!');
-    console.log('[ĐĂNG NHẬP] User:', user.username);
+    console.log(`[ĐĂNG NHẬP] User: ${user.username} | Role: ${req.session.role}`);
     console.log('==========================================');
 
     return res.json({
       verified: true,
-      message: 'Đăng nhập thành công! Chào mừng trở lại.'
+      message: 'Đăng nhập thành công! Chào mừng trở lại.',
+      user: {
+        username: user.username,
+        role: req.session.role
+      }
     });
 
   } catch (error) {

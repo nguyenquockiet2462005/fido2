@@ -73,7 +73,7 @@ function loadUsersFromFile() {
       // 💡 Migration tự động: Bổ sung role và profile chuẩn nếu tài khoản cũ chưa có
       users = parsedUsers.map(user => ({
         ...user,
-        role: user.role || 'student',
+        role: user.role || (user.username && user.username.startsWith('admin') ? 'admin' : 'student'),
         profile: {
           fullName: user.profile?.fullName || user.username,
           studentId: user.profile?.studentId || '',

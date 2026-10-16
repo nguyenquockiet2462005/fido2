@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUTECH | Student Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/workspace.css">
+    <script src="https://unpkg.com/@simplewebauthn/browser@9.0.1/dist/bundle/index.umd.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+    <div class="ws-wrapper">
+        <!-- HEADER -->
+        <header class="ws-header">
+            <div class="ws-header-left">
+                <div class="hutech-logo">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="hutech-name">HUTECH</div>
+                    <div class="hutech-sub">Đại học Công nghệ TP.HCM</div>
+                </div>
+                <div class="ws-badge">Student Workspace</div>
+            </div>
+            <div class="ws-header-right">
+                <div class="user-pill">
+                    <img id="ws-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user" alt="Avatar" class="ws-avatar-mini">
+                    <span id="ws-fullname">Đang tải...</span>
+                </div>
+                <button class="ws-btn-logout" onclick="logout()">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                    Đăng xuất
+                </button>
+            </div>
+        </header>
+
+        <!-- BODY -->
+        <div class="ws-body">
+            <!-- SIDEBAR ICONS -->
+            <aside class="ws-sidebar">
+                <button class="ws-side-btn active" title="Hồ sơ">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                </button>
+                <button class="ws-side-btn" title="Thông báo">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+                </button>
+                <button class="ws-side-btn" title="Lịch học">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+                </button>
+                <button class="ws-side-btn" title="Kết quả học tập">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+                </button>
+            </aside>
+
+            <!-- NỘI DUNG CHÍNH -->
+            <main class="ws-main">
+                <!-- BANNER CHÀO -->
+                <div class="ws-banner">
+                    <div class="ws-banner-text">
+                        <h1>Xin chào, <span id="ws-shortname">Bạn</span> 👋</h1>
+                        <p>Chào mừng đến <strong>Student Workspace HUTECH</strong> — tài khoản của bạn đã được bảo vệ bằng FIDO2 Passkey.</p>
+                    </div>
+                    <div class="ws-banner-badge">
+                        <svg viewBox="0 0 24 24" width="32" height="32" fill="rgba(255,255,255,0.8)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                        <div>
+                            <div class="badge-title">Bảo mật FIDO2</div>
+                            <div class="badge-sub">Passwordless ✓</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRID: HỒ SƠ + THÔNG BÁO -->
+                <div class="ws-grid">
+                    <!-- THẺ HỒ SƠ SINH VIÊN -->
+                    <div class="ws-card">
+                        <div class="ws-card-header">
+                            <div class="ws-card-icon icon-blue">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 2.75c1.24 0 2.25 1.01 2.25 2.25s-1.01 2.25-2.25 2.25S9.75 10.24 9.75 9 10.76 6.75 12 6.75zM17 17H7v-.75c0-1.66 3.34-2.5 5-2.5s5 .84 5 2.5V17z"/></svg>
+                            </div>
+                            <h3>Hồ Sơ Sinh Viên</h3>
+                        </div>
+
+                        <div class="ws-avatar-section">
+                            <img id="ws-profile-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user" alt="Avatar" class="ws-profile-avatar">
+                            <div class="ws-username-badge">@<span id="ws-username">--</span></div>
+                        </div>
+
+                        <div class="ws-info-list">
+                            <div class="ws-info-row">
+                                <span class="ws-info-label">Họ và Tên</span>
+                                <span id="val-name" class="ws-info-value">--</span>
+                            </div>
+                            <div class="ws-info-row">
+                                <span class="ws-info-label">MSSV</span>
+                                <span id="val-mssv" class="ws-info-value ws-code">--</span>
+                            </div>
+                            <div class="ws-info-row">
+                                <span class="ws-info-label">Ngày sinh</span>
+                                <span id="val-dob" class="ws-info-value">--/--/----</span>
+                            </div>
+                            <div class="ws-info-row" id="row-faculty" style="display:none;">
+                                <span class="ws-info-label">Khoa</span>
+                                <span id="val-faculty" class="ws-info-value">--</span>
+                            </div>
+                            <div class="ws-info-row" id="row-year" style="display:none;">
+                                <span class="ws-info-label">Khóa</span>
+                                <span id="val-year" class="ws-info-value">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Trạng thái xác thực thẻ -->
+                        <div id="card-status" class="ws-card-status unverified">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                            <span id="card-status-text">Chưa xác thực thẻ sinh viên vật lý</span>
+                        </div>
+
+                        <!-- NÚT THAO TÁC THẺ -->
+                        <button type="button" id="btn-scan-card" class="ws-btn-primary">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M17 5h-6v6h6V5zm-5 8h1.5v1.5H12V13zm1.5 1.5H15V16h-1.5v-1.5zM15 13h1.5v1.5H15V13zm-3 3h1.5v1.5H12V16zm1.5 1.5H15V19h-1.5v-1.5zM15 16h1.5v1.5H15V16zm1.5-1.5H18V16h-1.5v-1.5zm0 3H18V19h-1.5v-1.5zM22 7h-2V4h-3V2h5v5zm0 15v-5h-2v3h-3v2h5zM2 22h5v-2H4v-3H2v5zM2 2v5h2V4h3V2H2z"/></svg>
+                            <span id="btn-scan-text">Quét Thẻ Sinh Viên</span>
+                        </button>
+
+                        <button type="button" id="btn-unlink-card" class="ws-btn-danger" style="display: none; margin-top: 8px;">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                            Hủy Liên Kết Thẻ (Passkey)
+                        </button>
+
+                        <div id="ws-scan-progress" class="ws-scan-progress" style="display: none;"></div>
+
+                        <input type="file" id="card-file-input" accept="image/*" style="display: none;" />
+                        <div id="qr-hidden-reader" style="display: none;"></div>
+                    </div>
+
+                    <!-- CỘT PHẢI: THÔNG BÁO + BẢO MẬT -->
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <!-- THẺ THÔNG BÁO -->
+                        <div class="ws-card">
+                            <div class="ws-card-header">
+                                <div class="ws-card-icon icon-purple">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+                                </div>
+                                <h3>Thông Báo</h3>
+                            </div>
+                            <div class="ws-notify-list">
+                                <div class="ws-notify-item">
+                                    <div class="notify-dot dot-green"></div>
+                                    <div>
+                                        <div class="notify-title">Xác thực FIDO2 thành công 🎉</div>
+                                        <div class="notify-sub">Bạn đã đăng nhập bằng sinh trắc học an toàn.</div>
+                                    </div>
+                                </div>
+                                <div class="ws-notify-item">
+                                    <div class="notify-dot dot-blue"></div>
+                                    <div>
+                                        <div class="notify-title">Workspace HUTECH</div>
+                                        <div class="notify-sub">Hoàn thiện hồ sơ bằng cách quét thẻ sinh viên vật lý.</div>
+                                    </div>
+                                </div>
+                                <div class="ws-notify-item">
+                                    <div class="notify-dot dot-orange"></div>
+                                    <div>
+                                        <div class="notify-title">Bảo mật tài khoản</div>
+                                        <div class="notify-sub">Tài khoản được bảo vệ Passwordless — không cần mật khẩu.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- THẺ TRẠNG THÁI BẢO MẬT -->
+                        <div class="ws-card ws-security-card">
+                            <div class="ws-card-header">
+                                <div class="ws-card-icon icon-green">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                                </div>
+                                <h3>Trạng Thái Bảo Mật</h3>
+                            </div>
+                            <div class="security-rows">
+                                <div class="security-row">
+                                    <span class="sec-label">Phương thức đăng nhập</span>
+                                    <span class="sec-val sec-ok">FIDO2 Passkey ✓</span>
+                                </div>
+                                <div class="security-row">
+                                    <span class="sec-label">Tiêu chuẩn</span>
+                                    <span class="sec-val">WebAuthn / W3C</span>
+                                </div>
+                                <div class="security-row">
+                                    <span class="sec-label">Mã hóa</span>
+                                    <span class="sec-val">ES256 / RS256</span>
+                                </div>
+                                <div class="security-row">
+                                    <span class="sec-label">Số Passkey đã đăng ký</span>
+                                    <span class="sec-val sec-ok" id="val-creds-count">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script type="module">
+        import { scanStudentCardDual } from './js/scanner.js';
+        import { handleStepUpUnlinkCard } from './js/webauthn.js';
+
+        const btnScanCard = document.getElementById('btn-scan-card');
+        const btnScanText = document.getElementById('btn-scan-text');
+        const btnUnlinkCard = document.getElementById('btn-unlink-card');
+        const cardFileInput = document.getElementById('card-file-input');
+        const scanProgress = document.getElementById('ws-scan-progress');
+
+        function showProgress(msg, isError = false) {
+            if (!scanProgress) return;
+            scanProgress.style.display = 'flex';
+            if (isError) {
+                scanProgress.classList.add('error');
+            } else {
+                scanProgress.classList.remove('error');
+            }
+            scanProgress.innerText = msg;
+        }
+
+        function hideProgress(delay = 4000) {
+            if (!scanProgress) return;
+            setTimeout(() => {
+                scanProgress.style.display = 'none';
+            }, delay);
+        }
+
+        // Tải dữ liệu người dùng từ backend
+        async function loadData() {
+            try {
+                const res = await fetch('/api/user/me');
+                if (!res.ok) {
+                    window.location.href = 'index.html';
+                    return;
+                }
+                const u = await res.json();
+
+                // Nếu là admin, tự động chuyển về dashboard quản trị
+                if (u.role === 'admin') {
+                    window.location.href = 'dashboard.html';
+                    return;
+                }
+
+                // Cập nhật các trường thông tin
+                document.getElementById('ws-fullname').innerText = u.hoTen || u.username;
+                const shortName = (u.hoTen || u.username).split(' ').slice(-2).join(' ');
+                document.getElementById('ws-shortname').innerText = shortName;
+                document.getElementById('ws-username').innerText = u.username;
+                document.getElementById('val-name').innerText = u.hoTen || u.username;
+                document.getElementById('val-mssv').innerText = u.profile?.studentId || '(Chưa liên kết thẻ)';
+                document.getElementById('val-dob').innerText = u.ngaySinh || '--/--/----';
+                document.getElementById('val-creds-count').innerText = `${u.credentialsCount || 0} khóa`;
+
+                // Avatar
+                if (u.profile?.avatar) {
+                    document.getElementById('ws-avatar').src = u.profile.avatar;
+                    document.getElementById('ws-profile-avatar').src = u.profile.avatar;
+                }
+
+                // Khoa và Khóa học
+                if (u.profile?.faculty) {
+                    document.getElementById('val-faculty').innerText = u.profile.faculty;
+                    document.getElementById('row-faculty').style.display = 'flex';
+                } else {
+                    document.getElementById('row-faculty').style.display = 'none';
+                }
+                if (u.profile?.academicYear) {
+                    document.getElementById('val-year').innerText = u.profile.academicYear;
+                    document.getElementById('row-year').style.display = 'flex';
+                } else {
+                    document.getElementById('row-year').style.display = 'none';
+                }
+
+                // Trạng thái thẻ & hiển thị nút tương ứng
+                const cardStatus = document.getElementById('card-status');
+                const cardStatusText = document.getElementById('card-status-text');
+                if (u.profile?.isVerifiedCard) {
+                    cardStatus.className = 'ws-card-status verified';
+                    cardStatusText.innerText = '✓ Thẻ sinh viên đã được xác thực';
+                    btnScanText.innerText = 'Quét Lại / Cập Nhật Thẻ';
+                    btnUnlinkCard.style.display = 'flex';
+                } else {
+                    cardStatus.className = 'ws-card-status unverified';
+                    cardStatusText.innerText = 'Chưa xác thực thẻ sinh viên vật lý';
+                    btnScanText.innerText = 'Quét Thẻ Sinh Viên';
+                    btnUnlinkCard.style.display = 'none';
+                }
+
+            } catch (err) {
+                console.error('Lỗi tải dữ liệu:', err);
+                window.location.href = 'index.html';
+            }
+        }
+
+        // Sự kiện: Bấm nút Quét Thẻ
+        if (btnScanCard && cardFileInput) {
+            btnScanCard.addEventListener('click', () => {
+                cardFileInput.click();
+            });
+
+            cardFileInput.addEventListener('change', async (event) => {
+                const file = event.target.files && event.target.files[0];
+                if (!file) return;
+
+                btnScanCard.disabled = true;
+                const origText = btnScanText.innerText;
+                btnScanText.innerText = 'Đang phân tích thẻ...';
+                showProgress('Đang tải hình ảnh thẻ sinh viên...');
+
+                try {
+                    const scanResult = await scanStudentCardDual(file, msg => showProgress(msg));
+                    if (!scanResult || !scanResult.studentId) {
+                        throw new Error('Không thể nhận diện MSSV từ hình ảnh thẻ!');
+                    }
+
+                    showProgress('Đang đồng bộ và xác minh hồ sơ với máy chủ...');
+                    const response = await fetch('/api/user/profile/verify-card', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(scanResult)
+                    });
+                    const data = await response.json();
+
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.error || 'Xác thực thẻ thất bại.');
+                    }
+
+                    showProgress('✅ Xác thực thẻ HUTECH thành công!');
+                    hideProgress(3000);
+                    await loadData();
+
+                    if (data.revokedFakeAccount) {
+                        alert(`Bảo mật: Đã thu hồi tài khoản mạo danh (${data.revokedFakeAccount}) từng chiếm giữ MSSV ${scanResult.studentId}!`);
+                    }
+                } catch (err) {
+                    showProgress('❌ ' + err.message, true);
+                    hideProgress(5000);
+                } finally {
+                    btnScanCard.disabled = false;
+                    btnScanText.innerText = origText;
+                    cardFileInput.value = '';
+                }
+            });
+        }
+
+        // Sự kiện: Hủy liên kết thẻ (Step-Up Auth bằng Passkey)
+        if (btnUnlinkCard) {
+            btnUnlinkCard.addEventListener('click', async () => {
+                const confirmUnlink = confirm('Thao tác hủy thẻ sinh viên yêu cầu xác thực bảo mật Passkey / sinh trắc học.\n\nBạn có muốn tiếp tục không?');
+                if (!confirmUnlink) return;
+
+                btnUnlinkCard.disabled = true;
+                showProgress('Đang mở cảm biến sinh trắc học để xác thực hủy thẻ...');
+
+                try {
+                    const result = await handleStepUpUnlinkCard(msg => showProgress(msg));
+                    if (result && result.success) {
+                        showProgress('✅ Đã hủy liên kết thẻ sinh viên an toàn!');
+                        hideProgress(3000);
+                        await loadData();
+                    } else {
+                        throw new Error(result?.error || 'Xác thực thất bại.');
+                    }
+                } catch (err) {
+                    showProgress('❌ Lỗi hủy thẻ: ' + err.message, true);
+                    hideProgress(5000);
+                } finally {
+                    btnUnlinkCard.disabled = false;
+                }
+            });
+        }
+
+        // Đăng xuất
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = 'index.html';
+        }
+        window.logout = logout;
+
+        loadData();
+    </script>
+</body>
+</html>

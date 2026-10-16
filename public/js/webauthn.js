@@ -123,7 +123,7 @@ export async function handleLogin(username, logCallback) {
         
         if (verifyJSON.verified) {
             log("✅ Đăng nhập thành công!");
-            return { success: true, userInfo: verifyJSON.userInfo };
+            return { success: true, user: verifyJSON.user, userInfo: verifyJSON.user };
         } else {
             throw new Error(verifyJSON.error || "Chữ ký sinh trắc học không hợp lệ.");
         }
