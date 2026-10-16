@@ -120,9 +120,9 @@ export function findUserByUsername(username) {
 
 
 // Hàm tạo một người dùng mới và cất vào kho
-export function createUser(username) {
+export function createUser(username, customId = null) {
   const newUser = {
-    id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    id: customId || `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     username: username,
     role: username.startsWith('admin') ? 'admin' : 'student',
     profile: {

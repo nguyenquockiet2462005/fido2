@@ -14,6 +14,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getAllUsers } from './db.js';
 import authRoutes from './routes/auth.js'; // Nhập các API xác thực do Thành viên 2 phụ trách
+import userRoutes from './routes/user.js';
 
 // Cần thiết để lấy đường dẫn thư mục hiện tại khi dùng ES Module ("type": "module")
 const __filename = fileURLToPath(import.meta.url);
@@ -40,27 +41,18 @@ app.use(express.urlencoded({ extended: true }));
  * - Khi trình duyệt quét vân tay xong và gửi chữ ký về, Server mở Session ra lấy `challenge` cũ đối chiếu.
  * - Nếu không có Session, Server không thể nhớ được mình đã phát ra Challenge nào, dễ bị tấn công Replay Attack.
  */
+
+app.set('trust proxy', 1);
 app.use(
   session({
     // Khóa bí mật dùng để ký và mã hóa Session ID cookie, ngăn ngừa giả mạo cookie
-    secret: 'fido2-nhom-bi-mat-khong-the-doan-duoc-2026',
-
-    // `resave: false`: Không lưu lại session nếu không có dữ liệu mới thay đổi (giúp tối ưu hiệu năng)
-    resave: false,
-
-    // `saveUninitialized: false`: Chỉ tạo session khi chúng ta chủ động lưu dữ liệu (tiết kiệm bộ nhớ RAM)
-    saveUninitialized: false,
-
+    secret: process.env.SESSION_SECRET || 'fido2-nhom-bi-mat-khong-the-doan-duoc-2026',
+    resave: false, // `resave: false`: Không lưu lại session nếu không có dữ liệu mới thay đổi (giúp tối ưu hiệu năng)
+    saveUninitialized: false, // `saveUninitialized: false`: Chỉ tạo session khi chúng ta chủ động lưu dữ liệu (tiết kiệm bộ nhớ RAM)
     cookie: {
-      // `httpOnly: true`: BẢO MẬT CAO - Ngăn không cho mã độc JavaScript (XSS) trên trình duyệt đọc trộm cookie
-      httpOnly: true,
-
-      // `secure: false`: Đặt là false vì ta đang chạy thử nghiệm cục bộ với HTTP (http://localhost:3000)
-      // (Khi đưa lên môi trường thật có tên miền và HTTPS thì mới bật là true)
-      secure: false,
-
-      // Thời hạn tồn tại của phiên: 24 giờ
-      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true, // `httpOnly: true`: BẢO MẬT CAO - Ngăn không cho mã độc JavaScript (XSS) trên trình duyệt đọc trộm cookie
+      secure: process.env.NODE_ENV === 'production', // `secure: false`: Đặt là false vì ta đang chạy thử nghiệm cục bộ với HTTP (http://localhost:3000) // (Khi đưa lên môi trường thật có tên miền và HTTPS thì mới bật là true)
+      maxAge: 24 * 60 * 60 * 1000, // Thời hạn tồn tại của phiên: 24 giờ
     },
   })
 );
@@ -116,7 +108,7 @@ app.post('/api/auth/logout', (req, res) => {
 
 // Gắn toàn bộ các API FIDO2 (Đăng ký, Đăng nhập) do Thành viên 2 viết vào tiền tố /api/auth
 app.use('/api/auth', authRoutes);
-app.use('/api/user', authRoutes);
+app.use('/api/user', userRoutes);
 
 // ==========================================
 // 5. KHỞI ĐỘNG SERVER
