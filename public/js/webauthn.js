@@ -109,7 +109,7 @@ export async function handleLogin(username, logCallback) {
         }
 
         if (optionsRes.status === 404) {
-            throw new Error("Tài khoản này chưa có Passkey. Vui lòng bấm Đăng Kí trước!");
+            throw new Error("Tài khoản này chưa được đăng ký!");
         }
         if (!optionsRes.ok || optionsJSON.error) {
             throw new Error(optionsJSON?.error || `Lỗi từ máy chủ (${optionsRes.status})`);
