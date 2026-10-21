@@ -65,7 +65,7 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
             customMsg.includes('timed out') || 
             customMsg.includes('not allowed')
         ) {
-            customMsg = "Không thể mở xác thực vui lòng kiểm tra lại";
+            customMsg = "Lỗi xác thực";
         }
 
         log("❌ " + customMsg);
@@ -134,7 +134,7 @@ export async function handleLogin(username, logCallback) {
             customMsg.includes('timed out') || 
             customMsg.includes('not allowed')
         ) {
-            customMsg = "Không thể mở xác thực vui lòng kiểm tra lại";
+            customMsg = "Lỗi xác thực!!!";
         }
 
         log("❌ " + customMsg);
@@ -212,7 +212,7 @@ export async function handleStepUpUnlinkCard(logCallback) {
             customMsg.includes('timed out') || 
             customMsg.includes('not allowed')
         ) {
-            customMsg = "Không thể mở xác thực vui lòng kiểm tra lại";
+            customMsg = "Lỗi xác thực!!!";
         }
         log("❌ [HỦY THẺ THẤT BẠI]: " + customMsg);
         return { success: false, error: customMsg };

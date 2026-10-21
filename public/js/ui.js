@@ -107,7 +107,7 @@ if (btnRegister) {
         } catch (error) {
             let msg = error.message;
             if (msg.includes('timed out') || msg.includes('not allowed')) {
-                msg = 'Không thể mở xác thực sinh trắc học, vui lòng thử lại!';
+                msg = 'Lỗi xác thực!!!';
             }
             showInlinePopup('error', msg, 4000);
         } finally {
@@ -145,7 +145,7 @@ if (btnLogin) {
         } catch (error) {
             let msg = error.message;
             if (msg.includes('timed out') || msg.includes('not allowed')) {
-                msg = 'Không thể mở xác thực sinh trắc học, vui lòng thử lại!';
+                msg = 'Lỗi xác thực!!!';
             }
             showInlinePopup('error', msg, 4000);
         } finally {
