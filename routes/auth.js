@@ -84,7 +84,7 @@ router.post('/register-options', async (req, res) => {
   // Nếu tài khoản đã tồn tại và đã có Passkey -> Chặn đăng ký trùng
   if (user && user.credentials && user.credentials.length > 0) {
     return res.status(400).json({
-      error: 'Tên tài khoản này đã được đăng ký! Vui lòng chọn tên khác hoặc bấm Đăng nhập.'
+      error: 'Tên tài khoản này đã được đăng ký! Vui lòng nhập tên khác hoặc bấm Đăng nhập.'
     });
   }
 
