@@ -40,7 +40,7 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
             throw new Error(optionsJSON?.error || `Lỗi từ máy chủ (${optionsRes.status})`);
         }
 
-        log("🟢 Đang mở cảm biến vân tay / Windows Hello...", optionsJSON);
+        log("🟢 Đang yêu cầu xác thực sinh trắc học...", optionsJSON);
 
         // Gọi xác thực tạo khóa Passkey với thư viện SimpleWebAuthnBrowser v14
         const attResp = await startRegistration({ optionsJSON });
