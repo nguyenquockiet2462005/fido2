@@ -10,10 +10,10 @@ import { handleRegister, handleLogin } from './webauthn.js';
 // ==========================================
 // DOM ELEMENTS
 // ==========================================
-const btnRegister   = document.getElementById('btn-register');
-const btnLogin      = document.getElementById('btn-login');
+const btnRegister = document.getElementById('btn-register');
+const btnLogin = document.getElementById('btn-login');
 const inputUsername = document.getElementById('username');
-const inlinePopup   = document.getElementById('inline-popup');
+const inlinePopup = document.getElementById('inline-popup');
 const inlinePopupText = document.getElementById('inline-popup-text');
 
 let popupTimer = null;
@@ -62,7 +62,7 @@ function redirectByRole(role) {
 
 function setButtonsLoading(isLoading) {
     if (btnRegister) btnRegister.disabled = isLoading;
-    if (btnLogin)    btnLogin.disabled    = isLoading;
+    if (btnLogin) btnLogin.disabled = isLoading;
 }
 
 // ==========================================
@@ -91,7 +91,7 @@ if (btnRegister) {
     btnRegister.addEventListener('click', async () => {
         const username = inputUsername ? inputUsername.value.trim() : '';
         if (!username) {
-            showInlinePopup('error', 'Vui lòng nhập Username!', 3000);
+            showInlinePopup('error', 'Vui lòng nhập tên tài khoản!', 3000);
             if (inputUsername) inputUsername.focus();
             return;
         }
@@ -123,7 +123,7 @@ if (btnLogin) {
     btnLogin.addEventListener('click', async () => {
         const username = inputUsername ? inputUsername.value.trim() : '';
         if (!username) {
-            showInlinePopup('error', 'Vui lòng nhập Username!', 3000);
+            showInlinePopup('error', 'Vui lòng nhập tên tài khoản!', 3000);
             if (inputUsername) inputUsername.focus();
             return;
         }
@@ -133,7 +133,7 @@ if (btnLogin) {
             const result = await handleLogin(username, logToInspector);
             if (result && result.success) {
                 btnLogin.classList.add('btn-success-pop');
-                showInlinePopup('success', 'Đăng nhập thành công! Đang chuyển hướng...', 2000);
+                showInlinePopup('success', 'Đăng nhập thành công!', 2000);
 
                 setTimeout(() => {
                     btnLogin.classList.remove('btn-success-pop');
