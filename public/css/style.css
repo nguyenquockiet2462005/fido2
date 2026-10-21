@@ -9,16 +9,12 @@
 }
 
 :root {
-    --plum-primary: #7c1d54;
-    /* Tím mận chủ đạo */
-    --plum-dark: #58113a;
-    /* Tím đậm khi hover */
-    --mauve-bg: #dfc5d5;
-    /* Hồng tím pastel nền bên trái */
-    --mauve-circle: #b88da8;
-    /* Màu vòng tròn chứa phi hành gia */
-    --text-main: #3b112b;
-    --text-muted: #8b7985;
+   --plum-primary: #0056b3;      /* Xanh dương HUTECH đồng bộ nút Quét Thẻ SV */
+    --plum-dark: #003d82;         /* Xanh dương đậm khi di chuột (hover) */
+    --hutech-cyan: #38bdf8;       /* Xanh sáng điểm nhấn */
+    --hutech-yellow: #ffc72c;     /* Vàng thương hiệu HUTECH */
+    --text-main: #0f172a;         /* Chữ xanh đen đậm sắc nét */
+    --text-muted: #64748b;        /* Chữ xám phụ */
     --success: #10b981;
     --danger: #ef4444;
 }
