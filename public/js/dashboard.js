@@ -89,6 +89,17 @@ function updateDashboardMetrics(users) {
     if (el('stat-total-counters')) el('stat-total-counters').innerText = totalCounters;
 }
 
+// Hàm tiện ích: Khử mã HTML độc hại (Phòng chống Stored XSS)
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Vẽ bảng danh sách người dùng
 function renderUserTable(users) {
     const tbody = document.getElementById('user-table-body');
@@ -103,9 +114,14 @@ function renderUserTable(users) {
     users.forEach(user => {
         const creds = user.credentials || [];
         const passkeyCount = creds.length;
-        const latestCounter = creds.length > 0 ? creds[0].counter : 0;
+        const latestCounter = creds.length > 0 ? (creds[0].counter || 0) : 0;
         const hoTen = user.hoTen || user.profile?.fullName || user.username;
         const ngaySinh = user.ngaySinh || user.profile?.dob || '--/--/----';
+
+        const safeUsername = escapeHtml(user.username);
+        const safeHoTen = escapeHtml(hoTen);
+        const safeNgaySinh = escapeHtml(ngaySinh);
+        const safeCounter = escapeHtml(latestCounter);
 
         const statusTag = passkeyCount > 0
             ? `<span class="status-tag tag-open">Active</span>`
@@ -117,11 +133,11 @@ function renderUserTable(users) {
 
         rowsHtml += `
             <tr>
-                <td><strong style="color: #4338ca;">${user.username}</strong> ${roleTag}</td>
-                <td>${hoTen}</td>
-                <td style="color: #6b7280;">${ngaySinh}</td>
+                <td><strong style="color: #4338ca;">${safeUsername}</strong> ${roleTag}</td>
+                <td>${safeHoTen}</td>
+                <td style="color: #6b7280;">${safeNgaySinh}</td>
                 <td><strong>${passkeyCount}</strong></td>
-                <td><span style="font-family: monospace; color: #10b981; font-weight: 700;">${latestCounter}</span></td>
+                <td><span style="font-family: monospace; color: #10b981; font-weight: 700;">${safeCounter}</span></td>
                 <td>${statusTag}</td>
             </tr>
         `;
@@ -161,6 +177,7 @@ function renderRecentActivities(users) {
     recent.forEach((user, idx) => {
         const badgeClass = badgeColors[idx % badgeColors.length];
         const timeAgo = `${(idx + 1) * 8} phút trước`;
+        const safeUser = escapeHtml(user.username);
         actHtml += `
             <div class="activity-item">
                 <div class="activity-time">${timeAgo}</div>
@@ -169,7 +186,7 @@ function renderRecentActivities(users) {
                 </div>
                 <div class="activity-info">
                     <h4>Xác thực Passkey thành công</h4>
-                    <p>${user.username} vừa đăng nhập bằng sinh trắc học</p>
+                    <p>${safeUser} vừa đăng nhập bằng sinh trắc học</p>
                 </div>
             </div>
         `;

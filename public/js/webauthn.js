@@ -30,8 +30,15 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
             body: JSON.stringify({ username, hoTen, ngaySinh })
         });
 
-        const optionsJSON = await optionsRes.json();
-        if (optionsJSON.error) throw new Error(optionsJSON.error);
+        let optionsJSON;
+        try {
+            optionsJSON = await optionsRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
+        }
+        if (!optionsRes.ok || optionsJSON.error) {
+            throw new Error(optionsJSON?.error || `Lỗi từ máy chủ (${optionsRes.status})`);
+        }
 
         log("🟢 Đang mở cảm biến vân tay / Windows Hello...", optionsJSON);
         
@@ -50,7 +57,12 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
             body: JSON.stringify({ username, response: attResp })
         });
 
-        const verifyJSON = await verifyRes.json();
+        let verifyJSON;
+        try {
+            verifyJSON = await verifyRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối khi xác thực (${verifyRes.status})`);
+        }
         if (verifyJSON.verified) {
             log("✅ Đăng ký Passkey thành công!");
             return { success: true };
@@ -95,12 +107,19 @@ export async function handleLogin(username, logCallback) {
             body: JSON.stringify({ username })
         });
         
-        const optionsJSON = await optionsRes.json();
+        let optionsJSON;
+        try {
+            optionsJSON = await optionsRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
+        }
         
         if (optionsRes.status === 404) {
-            throw new Error("Tài khoản này chưa có Passkey. Vui lòng bấm Sign Up trước!");
+            throw new Error("Tài khoản này chưa có Passkey. Vui lòng bấm Đăng Kí trước!");
         }
-        if (optionsJSON.error) throw new Error(optionsJSON.error);
+        if (!optionsRes.ok || optionsJSON.error) {
+            throw new Error(optionsJSON?.error || `Lỗi từ máy chủ (${optionsRes.status})`);
+        }
         
         log("🟢 Đang yêu cầu xác thực...", optionsJSON);
         
@@ -119,7 +138,12 @@ export async function handleLogin(username, logCallback) {
             body: JSON.stringify({ username, response: asseResp })  
         });
         
-        const verifyJSON = await verifyRes.json();
+        let verifyJSON;
+        try {
+            verifyJSON = await verifyRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối khi xác thực (${verifyRes.status})`);
+        }
         
         if (verifyJSON.verified) {
             log("✅ Đăng nhập thành công!");
@@ -175,12 +199,17 @@ export async function handleStepUpUnlinkCard(logCallback) {
             headers: { 'Content-Type': 'application/json' }
         });
 
-        const optionsJSON = await optionsRes.json();
+        let optionsJSON;
+        try {
+            optionsJSON = await optionsRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
+        }
         if (optionsRes.status === 401) {
             throw new Error("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!");
         }
-        if (optionsJSON.error) {
-            throw new Error(optionsJSON.error);
+        if (!optionsRes.ok || optionsJSON.error) {
+            throw new Error(optionsJSON?.error || `Lỗi máy chủ (${optionsRes.status})`);
         }
 
         log("🟢 Bước 2/3: Đã nhận Challenge. Mời quét vân tay / Face ID / Windows Hello để xác thực...");
@@ -198,12 +227,17 @@ export async function handleStepUpUnlinkCard(logCallback) {
             body: JSON.stringify({ response: asseResp })
         });
 
-        const verifyJSON = await verifyRes.json();
+        let verifyJSON;
+        try {
+            verifyJSON = await verifyRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ khi hủy thẻ (${verifyRes.status})`);
+        }
         if (verifyRes.ok && verifyJSON.success) {
             log("✅ Xác thực sinh trắc học thành công! Thẻ sinh viên đã được hủy an toàn.");
             return { success: true, profile: verifyJSON.profile };
         } else {
-            throw new Error(verifyJSON.error || "Xác thực danh tính thất bại. Không thể hủy liên kết thẻ!");
+            throw new Error(verifyJSON?.error || "Xác thực danh tính thất bại. Không thể hủy liên kết thẻ!");
         }
     } catch (error) {
         let customMsg = error.message;

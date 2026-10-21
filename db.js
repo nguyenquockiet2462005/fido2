@@ -49,20 +49,21 @@ let users = [];
 // ==========================================
 // 1. CÁC HÀM ĐỒNG BỘ FILE TỰ ĐỘNG
 // ==========================================
-// Hàm lưu dữ liệu từ RAM xuống file JSON
+// Hàm lưu dữ liệu từ RAM xuống file JSON an toàn (Atomic Write chống hỏng file khi crash)
 function saveUsersToFile() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    // Chuyển mảng users sang chuỗi JSON và ghi đè vào file
-    fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2), 'utf-8');
+    // Ghi vào file tạm trước rồi đổi tên (atomic rename) để tránh ghi đè dở dang nếu mất điện/crash
+    const tempFile = path.join(DATA_DIR, `users_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.tmp`);
+    fs.writeFileSync(tempFile, JSON.stringify(users, null, 2), 'utf-8');
+    fs.renameSync(tempFile, DATA_FILE);
   } catch (error) {
     console.error('⚠️ [DB] Lỗi khi lưu dữ liệu ra file:', error.message);
   }
 }
 
-// Hàm nạp dữ liệu từ file JSON vào RAM khi khởi động
 // Hàm nạp dữ liệu từ file JSON vào RAM khi khởi động
 function loadUsersFromFile() {
   try {
@@ -71,9 +72,10 @@ function loadUsersFromFile() {
       const parsedUsers = JSON.parse(rawData);
 
       // 💡 Migration tự động: Bổ sung role và profile chuẩn nếu tài khoản cũ chưa có
+      // CHÚ Ý AN NINH: Chỉ tài khoản 'admin' chính xác mới có quyền admin, không cấp quyền theo tiền tố 'admin*'
       users = parsedUsers.map(user => ({
         ...user,
-        role: user.role || (user.username && user.username.startsWith('admin') ? 'admin' : 'student'),
+        role: user.role === 'admin' || user.username === 'admin' ? 'admin' : 'student',
         profile: {
           fullName: user.profile?.fullName || user.username,
           studentId: user.profile?.studentId || '',
@@ -112,28 +114,28 @@ loadUsersFromFile();
  * Hàm tìm kiếm một người dùng trong kho theo tên đăng nhập
  */
 export function findUserByUsername(username) {
-  return users.find((user) => user.username === username) || null;
+  if (!username || typeof username !== 'string') return null;
+  const normalized = username.trim().toLowerCase();
+  return users.find((user) => user.username.toLowerCase() === normalized) || null;
 }
-// 1. export: Từ khóa này rất quan trọng. Nó cho phép các file khác (như file server.js hay file của Người 2) có thể gọi và sử dụng lại hàm này.
-// 2. users.find(...): Đây là hàm có sẵn của JavaScript. Nó sẽ rà soát từ đầu đến cuối mảng users để tìm người có user.username trùng khớp với tên được truyền vào.
-// 3. || null: Nếu tìm thấy thì trả về thông tin người dùng đó; nếu không tìm thấy ai tên như vậy thì trả về null (nghĩa là rỗng/không tồn tại).
-
 
 // Hàm tạo một người dùng mới và cất vào kho
 export function createUser(username, customId = null) {
+  const cleanUsername = String(username).trim();
   const newUser = {
     id: customId || `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-    username: username,
-    role: username.startsWith('admin') ? 'admin' : 'student',
+    username: cleanUsername,
+    // BẢO MẬT: Tài khoản tạo mới mặc định là student, chỉ gán admin nếu username là 'admin' chính xác
+    role: cleanUsername.toLowerCase() === 'admin' ? 'admin' : 'student',
     profile: {
-      fullName: username,
+      fullName: cleanUsername,
       studentId: '',
       dob: '',
       academicYear: '',
       faculty: '',
       university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
       isVerifiedCard: false,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
       verifiedAt: null
     },
     credentials: [],
@@ -275,6 +277,14 @@ export function claimStudentIdentity(currentUsername, cardData) {
     revokedFakeAccount = existingOwner.username;
     console.warn(`🚨 [THU HỒI DANH TÍNH] Phát hiện tài khoản mạo danh "${revokedFakeAccount}" chiếm giữ MSSV ${studentId}. Tiến hành xóa bỏ!`);
     users = users.filter(u => u.username !== existingOwner.username);
+  }
+
+  // 2b. Kiểm tra xem có tài khoản nào đăng ký Username trùng MSSV này mà chưa xác thực không
+  const usernameSquatter = findUserByUsername(studentId);
+  if (usernameSquatter && usernameSquatter.username !== currentUsername && (!usernameSquatter.profile || !usernameSquatter.profile.isVerifiedCard)) {
+    console.warn(`🚨 [THU HỒI DANH TÍNH] Phát hiện tài khoản chiếm dụng username MSSV "${studentId}". Tiến hành giải phóng!`);
+    if (!revokedFakeAccount) revokedFakeAccount = usernameSquatter.username;
+    users = users.filter(u => u.username !== usernameSquatter.username);
   }
 
   // 3. Gán/Cập nhật thông tin thẻ chính chủ cho tài khoản
