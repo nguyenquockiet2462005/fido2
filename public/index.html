@@ -6,7 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FIDO2 HUTECH - Đăng Nhập Sinh Viên</title>
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://unpkg.com/@simplewebauthn/browser@9.0.1/dist/bundle/index.umd.min.js"></script>
+    <script src="/vendor/simplewebauthn-browser.min.js"></script>
+    <script>
+        if (!window.SimpleWebAuthnBrowser) {
+            document.write('<script src="https://unpkg.com/@simplewebauthn/browser@14.0.0/dist/bundle/index.umd.min.js"><\/script>');
+        }
+    </script>
 </head>
 
 <body>

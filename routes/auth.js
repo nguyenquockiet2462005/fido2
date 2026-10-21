@@ -1,5 +1,6 @@
 /**
  * routes/auth.js - KHÔNG GIAN LÀM VIỆC CỦA THÀNH VIÊN 2 (Backend FIDO2)
+ * Đã gia cố an ninh, validation, chống replay attack, chống session fixation, chống crash TypeError
  */
 
 import express from 'express';
@@ -25,11 +26,42 @@ const router = express.Router();
 
 // Cấu hình định danh cho máy chủ
 const rpName = 'FIDO2 Demo';
-// const rpID = 'localhost';
-// const origin = 'http://localhost:3000';
 const rpID = process.env.RP_ID || 'localhost';
 const origin = process.env.ORIGIN || 'http://localhost:3000';
 
+// Hỗ trợ cả localhost và 127.0.0.1 để tránh lỗi mismatch Origin khi test cục bộ
+const expectedOrigins = Array.from(new Set([
+  origin,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://localhost:3000'
+]));
+
+const expectedRPIDs = Array.from(new Set([
+  rpID,
+  'localhost',
+  '127.0.0.1'
+]));
+
+/**
+ * Hàm xác thực tính hợp lệ của Username
+ */
+function validateUsername(rawUsername) {
+  if (!rawUsername || typeof rawUsername !== 'string') {
+    return { valid: false, error: 'Vui lòng nhập tên người dùng hợp lệ!' };
+  }
+  const username = rawUsername.trim();
+  if (username.length === 0) {
+    return { valid: false, error: 'Vui lòng nhập tên người dùng!' };
+  }
+  if (username.length < 2 || username.length > 50) {
+    return { valid: false, error: 'Tên người dùng phải có từ 2 đến 50 ký tự!' };
+  }
+  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
+    return { valid: false, error: 'Tên người dùng chỉ được chứa chữ cái, số, dấu gạch dưới (_), gạch ngang (-) hoặc dấu chấm (.)!' };
+  }
+  return { valid: true, username };
+}
 
 
 // ==========================================
@@ -38,17 +70,15 @@ const origin = process.env.ORIGIN || 'http://localhost:3000';
 
 // 1. API Tạo Challenge Đăng ký (Ra đề)
 router.post('/register-options', async (req, res) => {
-  // Khách đến quầy xin đăng ký và đọc tên
-  const { username } = req.body;
-
-  // Kiểm tra người dùng có nhập tên hay chưa
-  if (!username) {
+  const check = validateUsername(req.body.username);
+  if (!check.valid) {
     return res.status(400).json({
-      error: 'Vui lòng nhập tên người dùng!'
+      error: check.error
     });
   }
+  const username = check.username;
 
-  // Tìm hồ sơ trong cơ sở dữ liệu, nếu chưa có thì tạo mới
+  // Tìm hồ sơ trong cơ sở dữ liệu
   const user = findUserByUsername(username);
 
   // Nếu tài khoản đã tồn tại và đã có Passkey -> Chặn đăng ký trùng
@@ -57,13 +87,14 @@ router.post('/register-options', async (req, res) => {
       error: 'Tên tài khoản này đã được đăng ký! Vui lòng chọn tên khác hoặc bấm Đăng nhập.'
     });
   }
-  // 2. Lấy ID người dùng (nếu user đã có sẵn) hoặc tạo ID tạm thời trong RAM (KHÔNG gọi createUser vào DB lúc này!)
+
+  // Lấy ID người dùng (nếu user đã có sẵn) hoặc tạo ID tạm thời trong RAM (KHÔNG gọi createUser vào DB lúc này!)
   const userId = user ? user.id : `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   try {
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
-      // Chuyển chuỗi văn bản sang Uint8Array
+      // Chuyển chuỗi văn bản sang Uint8Array theo đúng chuẩn SimpleWebAuthn v14
       userID: new TextEncoder().encode(userId),
       userName: username,
       attestationType: 'none',
@@ -77,8 +108,10 @@ router.post('/register-options', async (req, res) => {
         userVerification: 'preferred'
       },
     });
-    // 3. Ghi nhớ Challenge và thông tin đăng ký tạm vào Session của phiên này
+
+    // Ghi nhớ Challenge và thông tin đăng ký tạm vào Session của phiên này
     req.session.currentChallenge = options.challenge;
+    req.session.challengeCreatedAt = Date.now();
     req.session.registeringUserId = userId;
     req.session.registeringUsername = username;
 
@@ -104,39 +137,61 @@ router.post('/register-options', async (req, res) => {
 
 // 2. API Xác thực Đăng ký (Chấm điểm)
 router.post('/register-verify', async (req, res) => {
-  // Thu "lời giải" từ trình duyệt gửi lên
-  const { username, response } = req.body;
+  const check = validateUsername(req.body.username);
+  if (!check.valid) {
+    return res.status(400).json({
+      verified: false,
+      error: check.error
+    });
+  }
+  const username = check.username;
+  const { response } = req.body;
+
+  // Kiểm tra response object hợp lệ
+  if (!response || typeof response !== 'object' || !response.id) {
+    return res.status(400).json({
+      verified: false,
+      error: 'Dữ liệu phản hồi xác thực sinh trắc học không hợp lệ hoặc bị thiếu!'
+    });
+  }
 
   console.log('==========================================');
   console.log('[ĐĂNG KÝ] Bắt đầu xác thực');
   console.log('[ĐĂNG KÝ] Username:', username);
-  console.log('[ĐĂNG KÝ] Credential ID:', response?.id);
+  console.log('[ĐĂNG KÝ] Credential ID:', response.id);
   console.log('==========================================');
 
   // Kiểm tra tên gửi lên phải khớp với tên trong phiên đăng ký ban đầu
-  if (req.session.registeringUsername && req.session.registeringUsername !== username) {
+  if (!req.session.registeringUsername || req.session.registeringUsername.toLowerCase() !== username.toLowerCase()) {
     return res.status(400).json({
-      error: 'Dữ liệu phiên đăng ký không hợp lệ!'
+      verified: false,
+      error: 'Dữ liệu phiên đăng ký không hợp lệ hoặc đã hết hạn!'
     });
   }
-
 
   // Lấy lại Đề thi gốc từ trong túi cá nhân (Session) ra để đối chiếu
   const expectedChallenge = req.session.currentChallenge;
 
   if (!expectedChallenge) {
     return res.status(400).json({
-      error: 'Không tìm thấy bài thi gốc. Vui lòng thử lại!'
+      verified: false,
+      error: 'Không tìm thấy bài thi gốc hoặc phiên đã hết hạn. Vui lòng thử lại!'
     });
   }
+
+  // Hủy Challenge ngay lập tức để chống tấn công phát lại (Replay Attack)
+  req.session.currentChallenge = null;
+  const registeringUserId = req.session.registeringUserId;
+  req.session.registeringUserId = null;
+  req.session.registeringUsername = null;
 
   try {
     // Nhờ chuyên gia chấm điểm xem lời giải có khớp không
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
+      expectedOrigin: expectedOrigins,
+      expectedRPID: expectedRPIDs,
     });
 
     console.log('[ĐĂNG KÝ] Kết quả xác thực:', verification.verified);
@@ -149,7 +204,7 @@ router.post('/register-verify', async (req, res) => {
     }
 
     const { registrationInfo } = verification;
-    const credential = registrationInfo.credential;
+    const credential = registrationInfo?.credential;
 
     if (!credential) {
       return res.status(400).json({
@@ -161,28 +216,20 @@ router.post('/register-verify', async (req, res) => {
     // Chỉ tạo người dùng chính thức vào DB khi đã quét vân tay thành công!
     let user = findUserByUsername(username);
     if (!user) {
-      user = createUser(username, req.session.registeringUserId);
+      user = createUser(username, registeringUserId);
     }
 
-    addCredentialToUser(username, {
+    addCredentialToUser(user.username, {
       id: credential.id,
       publicKey: credential.publicKey,
       counter: credential.counter,
       transports: credential.transports || [],
     });
 
-    // Dọn dẹp session sau khi hoàn tất
-    req.session.currentChallenge = null;
-    req.session.registeringUserId = null;
-    req.session.registeringUsername = null;
-
-
     console.log('==========================================');
     console.log('[ĐĂNG KÝ] Lưu Passkey thành công!');
     console.log('[ĐĂNG KÝ] Credential ID:', credential.id);
     console.log('==========================================');
-
-    req.session.currentChallenge = null;
 
     return res.json({
       verified: true,
@@ -197,7 +244,7 @@ router.post('/register-verify', async (req, res) => {
 
     return res.status(400).json({
       verified: false,
-      error: error.message
+      error: error.message || 'Xác thực Passkey thất bại.'
     });
   }
 });
@@ -209,7 +256,13 @@ router.post('/register-verify', async (req, res) => {
 
 // 3. API Tạo Challenge Đăng nhập (Ra đề thi)
 router.post('/login-options', async (req, res) => {
-  const { username } = req.body;
+  const check = validateUsername(req.body.username);
+  if (!check.valid) {
+    return res.status(400).json({
+      error: check.error
+    });
+  }
+  const username = check.username;
 
   const user = findUserByUsername(username);
 
@@ -239,10 +292,12 @@ router.post('/login-options', async (req, res) => {
     });
 
     req.session.currentChallenge = options.challenge;
+    req.session.challengeCreatedAt = Date.now();
+    req.session.loginUsername = user.username;
 
     console.log('==========================================');
     console.log('[ĐĂNG NHẬP] Tạo Challenge thành công');
-    console.log('[ĐĂNG NHẬP] Username:', username);
+    console.log('[ĐĂNG NHẬP] Username:', user.username);
     console.log('[ĐĂNG NHẬP] Challenge:', options.challenge);
     console.log('==========================================');
 
@@ -260,12 +315,28 @@ router.post('/login-options', async (req, res) => {
 
 // 4. API Xác thực Đăng nhập (Chấm điểm)
 router.post('/login-verify', async (req, res) => {
-  const { username, response } = req.body;
+  const check = validateUsername(req.body.username);
+  if (!check.valid) {
+    return res.status(400).json({
+      verified: false,
+      error: check.error
+    });
+  }
+  const username = check.username;
+  const { response } = req.body;
+
+  // PHÒNG CHỐNG CRASH TYPEERROR: Kiểm tra chặt chẽ object response trước khi truy xuất response.id
+  if (!response || typeof response !== 'object' || !response.id) {
+    return res.status(400).json({
+      verified: false,
+      error: 'Dữ liệu chữ ký sinh trắc học không hợp lệ hoặc bị thiếu!'
+    });
+  }
 
   console.log('==========================================');
   console.log('[ĐĂNG NHẬP] Bắt đầu xác thực');
   console.log('[ĐĂNG NHẬP] Username:', username);
-  console.log('[ĐĂNG NHẬP] Credential ID:', response?.id);
+  console.log('[ĐĂNG NHẬP] Credential ID:', response.id);
   console.log('==========================================');
 
   const user = findUserByUsername(username);
@@ -280,9 +351,12 @@ router.post('/login-verify', async (req, res) => {
 
   if (!expectedChallenge) {
     return res.status(400).json({
-      error: 'Phiên đăng nhập hết hạn. Vui lòng làm lại!'
+      error: 'Phiên đăng nhập hết hạn hoặc challenge không hợp lệ. Vui lòng làm lại!'
     });
   }
+
+  // Hủy Challenge ngay lập tức để chống Replay Attack
+  req.session.currentChallenge = null;
 
   const userCredentials = user.credentials || [];
 
@@ -300,8 +374,8 @@ router.post('/login-verify', async (req, res) => {
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
+      expectedOrigin: expectedOrigins,
+      expectedRPID: expectedRPIDs,
       credential: {
         id: currentDevice.id,
         publicKey: currentDevice.publicKey,
@@ -322,28 +396,34 @@ router.post('/login-verify', async (req, res) => {
     const { authenticationInfo } = verification;
 
     updateCredentialCounter(
-      username,
+      user.username,
       currentDevice.id,
       authenticationInfo.newCounter
     );
 
-    req.session.currentChallenge = null;
-    req.session.loggedIn = true;
-    req.session.username = user.username;
-    req.session.role = user.role || (user.username.startsWith('admin') ? 'admin' : 'student');
-
-    console.log('==========================================');
-    console.log('[ĐĂNG NHẬP] Đăng nhập thành công!');
-    console.log(`[ĐĂNG NHẬP] User: ${user.username} | Role: ${req.session.role}`);
-    console.log('==========================================');
-
-    return res.json({
-      verified: true,
-      message: 'Đăng nhập thành công! Chào mừng trở lại.',
-      user: {
-        username: user.username,
-        role: req.session.role
+    // CHỐNG SESSION FIXATION: Tái tạo session ID mới khi đăng nhập thành công
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Lỗi tái tạo session ID:', err);
       }
+      req.session.loggedIn = true;
+      req.session.username = user.username;
+      // Chỉ user có role admin chính thức trong DB hoặc username === 'admin' mới là admin
+      req.session.role = user.role === 'admin' || user.username === 'admin' ? 'admin' : 'student';
+
+      console.log('==========================================');
+      console.log('[ĐĂNG NHẬP] Đăng nhập thành công!');
+      console.log(`[ĐĂNG NHẬP] User: ${user.username} | Role: ${req.session.role}`);
+      console.log('==========================================');
+
+      return res.json({
+        verified: true,
+        message: 'Đăng nhập thành công! Chào mừng trở lại.',
+        user: {
+          username: user.username,
+          role: req.session.role
+        }
+      });
     });
 
   } catch (error) {
@@ -354,7 +434,7 @@ router.post('/login-verify', async (req, res) => {
 
     return res.status(400).json({
       verified: false,
-      error: error.message
+      error: error.message || 'Xác thực đăng nhập thất bại!'
     });
   }
 });

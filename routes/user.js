@@ -1,5 +1,6 @@
 /**
  * routes/user.js - Quản lý Hồ sơ sinh viên & Xác thực thẻ vật lý HUTECH
+ * Đã gia cố an ninh, validation MSSV, chống replay attack trong Step-Up Auth
  */
 import express from 'express';
 import {
@@ -18,6 +19,28 @@ const router = express.Router();
 
 const rpID = process.env.RP_ID || 'localhost';
 const origin = process.env.ORIGIN || 'http://localhost:3000';
+
+const expectedOrigins = Array.from(new Set([
+    origin,
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://localhost:3000'
+]));
+
+const expectedRPIDs = Array.from(new Set([
+    rpID,
+    'localhost',
+    '127.0.0.1'
+]));
+
+// Helper lọc sạch ký tự nguy hiểm / HTML Injection trong chuỗi
+function sanitizeText(str, maxLen = 100) {
+    if (!str || typeof str !== 'string') return '';
+    return str
+        .replace(/[<>]/g, '') // Khử thẻ HTML
+        .trim()
+        .substring(0, maxLen);
+}
 
 // 1. API Lấy thông tin Hồ sơ cá nhân (Profile)
 // Endpoint: GET /api/user/profile
@@ -76,19 +99,26 @@ router.put('/profile/verify-card', (req, res) => {
 
     const { studentId, fullName, dob, academicYear, faculty } = req.body;
 
-    if (!studentId) {
+    if (!studentId || typeof studentId !== 'string' && typeof studentId !== 'number') {
         return res.status(400).json({
             error: 'Không tìm thấy Mã số sinh viên (MSSV) hợp lệ từ thẻ!'
         });
     }
 
+    const cleanMssv = String(studentId).trim();
+    if (cleanMssv.length < 6 || cleanMssv.length > 20 || !/^[0-9a-zA-Z]+$/.test(cleanMssv)) {
+        return res.status(400).json({
+            error: 'Mã số sinh viên (MSSV) không đúng định dạng hợp lệ!'
+        });
+    }
+
     try {
         const result = claimStudentIdentity(req.session.username, {
-            studentId: String(studentId).trim(),
-            fullName: fullName ? String(fullName).trim() : '',
-            dob: dob ? String(dob).trim() : '',
-            academicYear: academicYear ? String(academicYear).trim() : '',
-            faculty: faculty ? String(faculty).trim() : ''
+            studentId: cleanMssv,
+            fullName: sanitizeText(fullName, 80),
+            dob: sanitizeText(dob, 20),
+            academicYear: sanitizeText(academicYear, 30),
+            faculty: sanitizeText(faculty, 80)
         });
 
         return res.json({
@@ -135,6 +165,7 @@ router.post('/profile/unlink-card-options', async (req, res) => {
         });
 
         req.session.unlinkChallenge = options.challenge;
+        req.session.unlinkChallengeTime = Date.now();
         return res.json(options);
     } catch (error) {
         return res.status(500).json({
@@ -153,6 +184,13 @@ router.post('/profile/unlink-card-verify', async (req, res) => {
     }
 
     const { response } = req.body;
+    if (!response || typeof response !== 'object' || !response.id) {
+        return res.status(400).json({
+            success: false,
+            error: 'Dữ liệu xác thực sinh trắc học không hợp lệ hoặc bị thiếu!'
+        });
+    }
+
     const username = req.session.username;
     const user = findUserByUsername(username);
 
@@ -167,8 +205,11 @@ router.post('/profile/unlink-card-verify', async (req, res) => {
         });
     }
 
+    // Hủy Challenge ngay lập tức để chống Replay Attack
+    req.session.unlinkChallenge = null;
+
     const userCredentials = user.credentials || [];
-    const currentDevice = userCredentials.find(dev => dev.id === response?.id);
+    const currentDevice = userCredentials.find(dev => dev.id === response.id);
 
     if (!currentDevice) {
         return res.status(400).json({
@@ -180,8 +221,8 @@ router.post('/profile/unlink-card-verify', async (req, res) => {
         const verification = await verifyAuthenticationResponse({
             response,
             expectedChallenge,
-            expectedOrigin: origin,
-            expectedRPID: rpID,
+            expectedOrigin: expectedOrigins,
+            expectedRPID: expectedRPIDs,
             credential: {
                 id: currentDevice.id,
                 publicKey: currentDevice.publicKey,
@@ -198,13 +239,12 @@ router.post('/profile/unlink-card-verify', async (req, res) => {
         }
 
         updateCredentialCounter(
-            username,
+            user.username,
             currentDevice.id,
             verification.authenticationInfo.newCounter
         );
 
-        req.session.unlinkChallenge = null;
-        const updatedProfile = unlinkStudentCard(username);
+        const updatedProfile = unlinkStudentCard(user.username);
 
         return res.json({
             success: true,
@@ -214,7 +254,7 @@ router.post('/profile/unlink-card-verify', async (req, res) => {
     } catch (error) {
         return res.status(400).json({
             success: false,
-            error: error.message
+            error: error.message || 'Xác thực hủy thẻ thất bại.'
         });
     }
 });

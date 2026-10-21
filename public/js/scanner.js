@@ -97,11 +97,15 @@ export function parseHutechCardText(rawText) {
         result.academicYear = yearMatch[1].replace(/[-–—~./\s]+/g, " - ").trim();
     }
 
-    // 3. MSSV (từ nhãn MSSV: ... hoặc dãy 10-11 số bắt đầu bằng 2)
-    const mssvMatch = rawText.match(/(?:MSSV|Mã\s*SV|Mã\s*số)[:.;\-~=\s]*([0-9]{8,12})/i)
-        || rawText.match(/\b(2\d{9,10})\b/);
+    // 3. MSSV (từ nhãn MSSV: ... hoặc dãy số 8-12 ký tự có thể dính chữ O/l do OCR đọc nhầm)
+    const mssvMatch = rawText.match(/(?:MSSV|Mã\s*SV|Mã\s*số)[:.;\-~=\s]*([0-9OIl]{8,12})/i)
+        || rawText.match(/\b(2[0-9OIl]{9,10})\b/);
     if (mssvMatch && mssvMatch[1]) {
-        result.studentId = mssvMatch[1].trim();
+        // Chuẩn hóa OCR: Chuyển O/o thành 0, I/l thành 1
+        result.studentId = mssvMatch[1]
+            .replace(/[Oo]/g, '0')
+            .replace(/[Il]/g, '1')
+            .trim();
     }
 
     // 4. HỌ VÀ TÊN (Thuật toán 3 tầng)
@@ -236,12 +240,18 @@ export async function scanStudentCardDual(imageFile, progressCallback = () => { 
             if (window.Html5Qrcode) {
                 const html5QrCode = new window.Html5Qrcode("qr-hidden-reader");
                 let qrResult = null;
-                // Thử quét QR trên cả ảnh đã xoay ngang lẫn ảnh gốc
+                // Thử quét QR trên cả ảnh đã xoay ngang lẫn ảnh gốc (dùng false để không render canvas thừa vào hidden DOM)
                 try {
-                    qrResult = await html5QrCode.scanFile(optimizedImage, true);
+                    qrResult = await html5QrCode.scanFile(optimizedImage, false);
                 } catch (_) {
-                    qrResult = await html5QrCode.scanFile(imageFile, true);
+                    try {
+                        qrResult = await html5QrCode.scanFile(imageFile, false);
+                    } catch (_) {}
                 }
+                try {
+                    await html5QrCode.clear();
+                } catch (_) {}
+
                 if (qrResult && qrResult.trim()) {
                     return qrResult.trim().replace(/[^0-9]/g, '');
                 }
