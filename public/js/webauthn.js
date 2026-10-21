@@ -23,7 +23,7 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
 
     try {
         log("🟡 Đang gửi yêu cầu xin Challenge từ Server...");
-        
+
         const optionsRes = await fetch('/api/auth/register-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -41,14 +41,9 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
         }
 
         log("🟢 Đang mở cảm biến vân tay / Windows Hello...", optionsJSON);
-        
-        // Hỗ trợ cả 2 dạng tham số của SimpleWebAuthnBrowser
-        let attResp;
-        try {
-            attResp = await startRegistration({ optionsJSON });
-        } catch (e) {
-            attResp = await startRegistration(optionsJSON);
-        }
+
+        // Gọi xác thực tạo khóa Passkey với thư viện SimpleWebAuthnBrowser v14
+        const attResp = await startRegistration({ optionsJSON });
 
         log("🔵 Đang gửi chữ ký lên Server kiểm chứng...", attResp);
         const verifyRes = await fetch('/api/auth/register-verify', {
@@ -70,14 +65,13 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
             throw new Error(verifyJSON.error || "Xác minh thất bại từ máy chủ.");
         }
     } catch (error) {
-        // Kiểm tra nếu lỗi do tắt bảng Windows Hello, hết thời gian chờ hoặc thiết bị không hỗ trợ
         let customMsg = error.message;
         if (
-            error.name === 'NotAllowedError' || 
-            customMsg.includes('timed out') || 
+            error.name === 'NotAllowedError' ||
+            customMsg.includes('timed out') ||
             customMsg.includes('not allowed')
         ) {
-            customMsg = "Lỗi xác thực!";
+            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
         }
 
         log("❌ " + customMsg);
@@ -100,51 +94,47 @@ export async function handleLogin(username, logCallback) {
 
     try {
         log("🟡 Đang gửi yêu cầu xin Challenge đăng nhập...");
-        
+
         const optionsRes = await fetch('/api/auth/login-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-        
+
         let optionsJSON;
         try {
             optionsJSON = await optionsRes.json();
         } catch (_) {
             throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
         }
-        
+
         if (optionsRes.status === 404) {
             throw new Error("Tài khoản này chưa có Passkey. Vui lòng bấm Đăng Kí trước!");
         }
         if (!optionsRes.ok || optionsJSON.error) {
             throw new Error(optionsJSON?.error || `Lỗi từ máy chủ (${optionsRes.status})`);
         }
-        
+
         log("🟢 Đang yêu cầu xác thực...", optionsJSON);
-        
-        let asseResp;
-        try {
-            asseResp = await startAuthentication({ optionsJSON });
-        } catch (e) {
-            asseResp = await startAuthentication(optionsJSON);
-        }
-        
+
+        // Gọi xác thực đăng nhập một lần duy nhất với cấu trúc optionsJSON chuẩn
+        const asseResp = await startAuthentication({ optionsJSON });
+
         log("🔵 Đang gửi chữ ký sinh trắc học lên Server...", asseResp);
-        
+
         const verifyRes = await fetch('/api/auth/login-verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, response: asseResp })  
+            body: JSON.stringify({ username, response: asseResp })
         });
-        
+
         let verifyJSON;
         try {
             verifyJSON = await verifyRes.json();
         } catch (_) {
             throw new Error(`Lỗi kết nối khi xác thực (${verifyRes.status})`);
         }
-        
+
         if (verifyJSON.verified) {
             log("✅ Đăng nhập thành công!");
             return { success: true, user: verifyJSON.user, userInfo: verifyJSON.user };
@@ -154,11 +144,11 @@ export async function handleLogin(username, logCallback) {
     } catch (error) {
         let customMsg = error.message;
         if (
-            error.name === 'NotAllowedError' || 
-            customMsg.includes('timed out') || 
+            error.name === 'NotAllowedError' ||
+            customMsg.includes('timed out') ||
             customMsg.includes('not allowed')
         ) {
-            customMsg = "Lỗi xác thực!";
+            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
         }
 
         log("❌ " + customMsg);
@@ -213,12 +203,7 @@ export async function handleStepUpUnlinkCard(logCallback) {
         }
 
         log("🟢 Bước 2/3: Đã nhận Challenge. Mời quét vân tay / Face ID / Windows Hello để xác thực...");
-        let asseResp;
-        try {
-            asseResp = await startAuthentication({ optionsJSON });
-        } catch (e) {
-            asseResp = await startAuthentication(optionsJSON);
-        }
+        const asseResp = await startAuthentication({ optionsJSON });
 
         log("🔵 Bước 3/3: Đã tạo chữ ký sinh trắc học, đang gửi Server kiểm tra...");
         const verifyRes = await fetch('/api/user/profile/unlink-card-verify', {
@@ -242,11 +227,11 @@ export async function handleStepUpUnlinkCard(logCallback) {
     } catch (error) {
         let customMsg = error.message;
         if (
-            error.name === 'NotAllowedError' || 
-            customMsg.includes('timed out') || 
+            error.name === 'NotAllowedError' ||
+            customMsg.includes('timed out') ||
             customMsg.includes('not allowed')
         ) {
-            customMsg = "Không thể mở xác thực vui lòng kiểm tra lại";
+            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
         }
         log("❌ [HỦY THẺ THẤT BẠI]: " + customMsg);
         return { success: false, error: customMsg };
