@@ -78,18 +78,24 @@ router.post('/register-options', async (req, res) => {
   }
   const username = check.username;
 
-  // Tìm hồ sơ trong cơ sở dữ liệu
-  const user = findUserByUsername(username);
-
-  // Nếu tài khoản đã tồn tại và đã có Passkey -> Chặn đăng ký trùng
-  if (user && user.credentials && user.credentials.length > 0) {
+  // BẢO MẬT: Chặn đăng ký các username hệ thống bảo lưu (Reserved Usernames)
+  const RESERVED_USERNAMES = ['admin', 'administrator', 'root', 'system'];
+  if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
     return res.status(400).json({
-      error: 'Tên tài khoản này đã được đăng ký! Vui lòng nhập tên khác'
+      error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
     });
   }
 
-  // Lấy ID người dùng (nếu user đã có sẵn) hoặc tạo ID tạm thời trong RAM (KHÔNG gọi createUser vào DB lúc này!)
-  const userId = user ? user.id : `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // Kiểm tra tài khoản đã tồn tại trong cơ sở dữ liệu chưa
+  const existingUser = findUserByUsername(username);
+  if (existingUser) {
+    return res.status(400).json({
+      error: 'Tên tài khoản này đã tồn tại! Vui lòng chọn tên khác hoặc bấm Đăng nhập.'
+    });
+  }
+
+  // Tạo ID tạm thời trong RAM cho người dùng mới (KHÔNG gọi createUser vào DB lúc này!)
+  const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   try {
     const options = await generateRegistrationOptions({
       rpName,
@@ -98,11 +104,7 @@ router.post('/register-options', async (req, res) => {
       userID: new TextEncoder().encode(userId),
       userName: username,
       attestationType: 'none',
-      excludeCredentials: (user?.credentials || []).map(cred => ({
-        id: cred.id,
-        type: 'public-key',
-        transports: cred.transports || [],
-      })),
+      excludeCredentials: [],
       authenticatorSelection: {
         residentKey: 'discouraged',
         userVerification: 'preferred'
@@ -214,17 +216,32 @@ router.post('/register-verify', async (req, res) => {
     }
 
     // Chỉ tạo người dùng chính thức vào DB khi đã quét vân tay thành công!
-    let user = findUserByUsername(username);
-    if (!user) {
-      user = createUser(username, registeringUserId);
+
+    // BẢO MẬT: Chặn gán passkey cho các tài khoản hệ thống bảo lưu
+    const RESERVED_USERNAMES = ['admin', 'administrator', 'root', 'system'];
+    if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
+      return res.status(400).json({
+        verified: false,
+        error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
+      });
     }
 
+    let user = findUserByUsername(username);
+    if (user) {
+      return res.status(400).json({
+        verified: false,
+        error: 'Tài khoản này đã tồn tại. Không thể đăng ký đè Passkey!'
+      });
+    }
+    // Tạo tài khoản mới hoàn toàn
+    user = createUser(username, registeringUserId);
     addCredentialToUser(user.username, {
       id: credential.id,
       publicKey: credential.publicKey,
       counter: credential.counter,
       transports: credential.transports || [],
     });
+
 
     console.log('==========================================');
     console.log('[ĐĂNG KÝ] Lưu Passkey thành công!');
@@ -408,8 +425,8 @@ router.post('/login-verify', async (req, res) => {
       }
       req.session.loggedIn = true;
       req.session.username = user.username;
-      // Chỉ user có role admin chính thức trong DB hoặc username === 'admin' mới là admin
-      req.session.role = user.role === 'admin' || user.username === 'admin' ? 'admin' : 'student';
+      // Phân quyền chuẩn xác theo role đã lưu trong cơ sở dữ liệu
+      req.session.role = user.role === 'admin' ? 'admin' : 'student';
 
       console.log('==========================================');
       console.log('[ĐĂNG NHẬP] Đăng nhập thành công!');

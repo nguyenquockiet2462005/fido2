@@ -47,20 +47,103 @@ const DATA_FILE = path.join(DATA_DIR, 'users.json');
 let users = [];
 
 // ==========================================
-// 1. CÁC HÀM ĐỒNG BỘ FILE TỰ ĐỘNG
+// 1. CÁC HÀM ĐỒNG BỘ DỮ LIỆU (DUAL-ENGINE: LOCAL FILE + CLOUD MONGODB)
 // ==========================================
-// Hàm lưu dữ liệu từ RAM xuống file JSON an toàn (Atomic Write chống hỏng file khi crash)
-function saveUsersToFile() {
+let mongoClient = null;
+let mongoCollection = null;
+let isCloudSyncing = false;
+
+// Lưu cục bộ xuống file users.json (Atomic write chống corrupt file)
+function saveUsersToFileLocal() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    // Ghi vào file tạm trước rồi đổi tên (atomic rename) để tránh ghi đè dở dang nếu mất điện/crash
     const tempFile = path.join(DATA_DIR, `users_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.tmp`);
     fs.writeFileSync(tempFile, JSON.stringify(users, null, 2), 'utf-8');
     fs.renameSync(tempFile, DATA_FILE);
   } catch (error) {
-    console.error('⚠️ [DB] Lỗi khi lưu dữ liệu ra file:', error.message);
+    console.error('⚠️ [DB-LOCAL] Lỗi khi lưu dữ liệu ra file:', error.message);
+  }
+}
+
+// Đồng bộ dữ liệu lên MongoDB Atlas (chạy ngầm không gây block request)
+async function syncUsersToCloud() {
+  if (!mongoCollection || isCloudSyncing) return;
+  try {
+    isCloudSyncing = true;
+    const currentIds = users.map(u => u.id);
+    // Xóa những user không còn tồn tại trong RAM (nếu có tài khoản bị hủy)
+    await mongoCollection.deleteMany({ id: { $nin: currentIds } });
+
+    if (users.length > 0) {
+      const ops = users.map(u => ({
+        replaceOne: {
+          filter: { id: u.id },
+          replacement: { ...u },
+          upsert: true
+        }
+      }));
+      await mongoCollection.bulkWrite(ops);
+    }
+  } catch (err) {
+    console.error('⚠️ [DB-CLOUD] Lỗi đồng bộ ngầm lên MongoDB Atlas:', err.message);
+  } finally {
+    isCloudSyncing = false;
+  }
+}
+
+// Hàm lưu dữ liệu tổng hợp: Vừa lưu local file, vừa đẩy lên Cloud MongoDB
+function saveUsersToFile() {
+  saveUsersToFileLocal();
+  if (mongoCollection) {
+    syncUsersToCloud();
+  }
+}
+
+/**
+ * Khởi tạo kết nối MongoDB Atlas (Nếu có biến MONGODB_URI)
+ * Giữ dữ liệu vĩnh viễn trên Render dù server có restart/sleep
+ */
+export async function initMongoDB() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.log('📦 [DB] Không phát hiện MONGODB_URI. Sử dụng chế độ lưu trữ cục bộ: data/users.json');
+    return;
+  }
+
+  try {
+    console.log('🔄 [DB] Đang kết nối tới MongoDB Atlas...');
+    const { MongoClient } = await import('mongodb');
+    mongoClient = new MongoClient(uri);
+    await mongoClient.connect();
+    const db = mongoClient.db('fido2_db');
+    mongoCollection = db.collection('users');
+    console.log('🍃 [DB] Kết nối MongoDB Atlas THÀNH CÔNG! Dữ liệu đã được bảo toàn trên Cloud.');
+
+    // Nạp dữ liệu từ Cloud vào RAM
+    const cloudCount = await mongoCollection.countDocuments();
+    if (cloudCount > 0) {
+      const cloudUsers = await mongoCollection.find({}).toArray();
+      users = cloudUsers.map(user => {
+        const { _id, ...rest } = user;
+        return {
+          ...rest,
+          credentials: (rest.credentials || []).map(cred => ({
+            ...cred,
+            publicKey: cred.publicKey ? new Uint8Array(Object.values(cred.publicKey)) : cred.publicKey,
+          }))
+        };
+      });
+      console.log(`📦 [DB-CLOUD] Đã tải và đồng bộ thành công ${users.length} tài khoản từ MongoDB Atlas vào RAM.`);
+      saveUsersToFileLocal(); // Cập nhật lại file local làm bản sao lưu
+    } else if (users.length > 0) {
+      console.log(`🚀 [DB-CLOUD] Database Cloud đang trống. Tự động đồng bộ ${users.length} tài khoản ban đầu lên MongoDB Atlas...`);
+      await syncUsersToCloud();
+      console.log('✅ [DB-CLOUD] Đồng bộ ban đầu lên MongoDB Atlas thành công!');
+    }
+  } catch (err) {
+    console.error('⚠️ [DB-CLOUD] Không thể kết nối MongoDB Atlas, tiếp tục dùng local file:', err.message);
   }
 }
 
@@ -72,10 +155,10 @@ function loadUsersFromFile() {
       const parsedUsers = JSON.parse(rawData);
 
       // 💡 Migration tự động: Bổ sung role và profile chuẩn nếu tài khoản cũ chưa có
-      // CHÚ Ý AN NINH: Chỉ tài khoản 'admin' chính xác mới có quyền admin, không cấp quyền theo tiền tố 'admin*'
+      // CHÚ Ý AN NINH: Chỉ tài khoản 'admin' chính thức mới có quyền admin
       users = parsedUsers.map(user => ({
         ...user,
-        role: user.role === 'admin' || user.username === 'admin' ? 'admin' : 'student',
+        role: user.username.toLowerCase() === 'admin' && user.role === 'admin' ? 'admin' : (user.username.toLowerCase() === 'admin' ? 'admin' : 'student'),
         profile: {
           fullName: user.profile?.fullName || user.username,
           studentId: user.profile?.studentId || '',
@@ -102,8 +185,44 @@ function loadUsersFromFile() {
   }
 }
 
-// Tự động gọi đọc file ngay khi Server bật lên
+/**
+ * BẢO MẬT: Khởi tạo tài khoản Admin mặc định (Seed / Biến môi trường)
+ * Tránh lỗ hổng 'ai đăng ký trước sẽ thành admin'
+ */
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+
+export function seedAdminUser() {
+  const existingAdmin = users.find(u => u.username.toLowerCase() === ADMIN_USERNAME.toLowerCase());
+  if (!existingAdmin) {
+    const adminUser = {
+      id: `admin_seed_${Date.now()}`,
+      username: ADMIN_USERNAME,
+      role: 'admin',
+      profile: {
+        fullName: 'Quản trị viên Hệ thống',
+        studentId: 'ADMIN-01',
+        dob: '01/01/2000',
+        academicYear: 'N/A',
+        faculty: 'Quản trị Hệ thống',
+        university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+        isVerifiedCard: true,
+        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${ADMIN_USERNAME}`,
+        verifiedAt: new Date().toISOString()
+      },
+      credentials: []
+    };
+    users.push(adminUser);
+    saveUsersToFile();
+    console.log(`🛡️ [DB-SEED] Đã tự động khởi tạo tài khoản Admin mặc định: ${ADMIN_USERNAME}`);
+  } else if (existingAdmin.role !== 'admin') {
+    existingAdmin.role = 'admin';
+    saveUsersToFile();
+  }
+}
+
+// Tự động gọi đọc file và seed admin ngay khi Server bật lên
 loadUsersFromFile();
+seedAdminUser();
 
 
 // ==========================================
@@ -125,8 +244,8 @@ export function createUser(username, customId = null) {
   const newUser = {
     id: customId || `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     username: cleanUsername,
-    // BẢO MẬT: Tài khoản tạo mới mặc định là student, chỉ gán admin nếu username là 'admin' chính xác
-    role: cleanUsername.toLowerCase() === 'admin' ? 'admin' : 'student',
+    // BẢO MẬT: Mọi tài khoản đăng ký qua form công khai LUÔN LUÔN là student
+    role: 'student',
     profile: {
       fullName: cleanUsername,
       studentId: '',

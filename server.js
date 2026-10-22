@@ -12,7 +12,7 @@ import express from 'express';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getAllUsers } from './db.js';
+import { getAllUsers, initMongoDB } from './db.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
@@ -164,6 +164,7 @@ const isMainModule = process.argv[1] && (
 );
 
 if (isMainModule) {
+  await initMongoDB();
   app.listen(PORT, () => {
     console.log('====================================================');
     console.log(`Server FIDO2 đang chạy tại: http://localhost:${PORT}`);
