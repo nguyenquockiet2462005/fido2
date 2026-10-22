@@ -78,24 +78,36 @@ router.post('/register-options', async (req, res) => {
   }
   const username = check.username;
 
-  // BẢO MẬT: Chặn đăng ký các username hệ thống bảo lưu (Reserved Usernames)
-  const RESERVED_USERNAMES = ['admin', 'administrator', 'root', 'system'];
-  if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
-    return res.status(400).json({
-      error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
-    });
-  }
-
-  // Kiểm tra tài khoản đã tồn tại trong cơ sở dữ liệu chưa
   const existingUser = findUserByUsername(username);
-  if (existingUser) {
-    return res.status(400).json({
-      error: 'Tên tài khoản này đã tồn tại! Vui lòng chọn tên khác hoặc bấm Đăng nhập.'
-    });
+
+  // BẢO MẬT: Xử lý tài khoản Admin và tài khoản hệ thống bảo lưu
+  const isSystemAdmin = username.toLowerCase() === 'admin';
+  if (isSystemAdmin) {
+    // Nếu tài khoản admin ĐÃ có Passkey rồi -> Khóa tuyệt đối, không cho đăng ký lại
+    if (existingUser && existingUser.credentials && existingUser.credentials.length > 0) {
+      return res.status(400).json({
+        error: 'Tài khoản Admin đã được cài đặt Passkey! Vui lòng bấm Đăng nhập.'
+      });
+    }
+    // Nếu admin chưa có Passkey -> Cho phép khởi tạo Passkey lần đầu (First-time Admin Setup)
+  } else {
+    // Với các tài khoản bảo lưu khác
+    const OTHER_RESERVED = ['administrator', 'root', 'system'];
+    if (OTHER_RESERVED.includes(username.toLowerCase())) {
+      return res.status(400).json({
+        error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
+      });
+    }
+    // Với người dùng thường: Chặn đăng ký nếu tài khoản đã tồn tại
+    if (existingUser) {
+      return res.status(400).json({
+        error: 'Tên tài khoản này đã tồn tại! Vui lòng chọn tên khác hoặc bấm Đăng nhập.'
+      });
+    }
   }
 
-  // Tạo ID tạm thời trong RAM cho người dùng mới (KHÔNG gọi createUser vào DB lúc này!)
-  const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // Lấy ID người dùng (nếu là admin đã seed sẵn) hoặc tạo ID tạm thời trong RAM cho người dùng mới
+  const userId = (isSystemAdmin && existingUser) ? existingUser.id : `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   try {
     const options = await generateRegistrationOptions({
       rpName,
@@ -217,20 +229,35 @@ router.post('/register-verify', async (req, res) => {
 
     // Chỉ tạo người dùng chính thức vào DB khi đã quét vân tay thành công!
 
-    // BẢO MẬT: Chặn gán passkey cho các tài khoản hệ thống bảo lưu
-    const RESERVED_USERNAMES = ['admin', 'administrator', 'root', 'system'];
-    if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
-      return res.status(400).json({
-        verified: false,
-        error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
-      });
-    }
-
     let user = findUserByUsername(username);
     if (user) {
+      // Trường hợp đặc biệt: Khởi tạo Passkey lần đầu cho tài khoản Admin đã seed (khi chưa có Passkey)
+      if (user.username.toLowerCase() === 'admin' && user.role === 'admin' && (!user.credentials || user.credentials.length === 0)) {
+        addCredentialToUser(user.username, {
+          id: credential.id,
+          publicKey: credential.publicKey,
+          counter: credential.counter,
+          transports: credential.transports || [],
+        });
+        console.log('🛡️ [ADMIN] Khởi tạo Passkey ban đầu cho Quản trị viên thành công!');
+        return res.json({
+          verified: true,
+          message: 'Khởi tạo Passkey Admin thành công! Vui lòng bấm Đăng nhập.'
+        });
+      }
+
       return res.status(400).json({
         verified: false,
         error: 'Tài khoản này đã tồn tại. Không thể đăng ký đè Passkey!'
+      });
+    }
+
+    // BẢO MẬT: Chặn gán passkey cho các tài khoản hệ thống bảo lưu khác
+    const OTHER_RESERVED = ['administrator', 'root', 'system'];
+    if (OTHER_RESERVED.includes(username.toLowerCase())) {
+      return res.status(400).json({
+        verified: false,
+        error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
       });
     }
     // Tạo tài khoản mới hoàn toàn
