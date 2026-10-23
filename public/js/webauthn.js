@@ -157,6 +157,74 @@ export async function handleLogin(username, logCallback) {
 }
 
 // ==========================================
+// 2b. LUỒNG ĐĂNG NHẬP PASSKEY 1-CHẠM (USERNAMELESS)
+// ==========================================
+export async function handleQuickPasskeyLogin(logCallback) {
+    const log = typeof logCallback === 'function' ? logCallback : console.log;
+    const { startAuthentication } = window.SimpleWebAuthnBrowser || {};
+    if (!startAuthentication) {
+        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
+        log("❌ " + errorMsg);
+        return { success: false, error: errorMsg };
+    }
+
+    try {
+        log("Đang khởi tạo phiên đăng nhập 1-chạm...");
+        const optionsRes = await fetch('/api/auth/login-options', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}) // Không gửi username
+        });
+
+        let optionsJSON;
+        try {
+            optionsJSON = await optionsRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
+        }
+
+        if (!optionsRes.ok || optionsJSON.error) {
+            throw new Error(optionsJSON?.error || "Không thể khởi tạo phiên đăng nhập.");
+        }
+
+        log("Vui lòng chạm vân tay hoặc quét Face ID...");
+        const asseResp = await startAuthentication({ optionsJSON });
+
+        log("Đang xác thực chữ ký bảo mật...");
+        const verifyRes = await fetch('/api/auth/login-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ response: asseResp }) // Không gửi username
+        });
+
+        let verifyJSON;
+        try {
+            verifyJSON = await verifyRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ (${verifyRes.status})`);
+        }
+
+        if (verifyRes.ok && verifyJSON.verified) {
+            log(`Đăng nhập thành công! Xin chào ${verifyJSON.user?.username || ''}`);
+            return { success: true, user: verifyJSON.user };
+        } else {
+            throw new Error(verifyJSON?.error || "Xác thực Passkey thất bại.");
+        }
+    } catch (error) {
+        let customMsg = error.message;
+        if (
+            error.name === 'NotAllowedError' ||
+            customMsg.includes('timed out') ||
+            customMsg.includes('not allowed')
+        ) {
+            customMsg = "Đã hủy thao tác xác thực Passkey.";
+        }
+        log("❌ " + customMsg);
+        return { success: false, error: customMsg };
+    }
+}
+
+// ==========================================
 // 3. LUỒNG ĐĂNG XUẤT (LOGOUT)
 // ==========================================
 export async function handleLogout(logCallback) {
@@ -251,7 +319,7 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
     }
 
     try {
-        log("🔐 Đang chuẩn bị phiên xác thực...");
+        log("Đang chuẩn bị phiên xác thực...");
         const optionsRes = await fetch('/api/user/profile/step-up-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -270,10 +338,10 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
             throw new Error(optionsJSON?.error || `Lỗi máy chủ (${optionsRes.status})`);
         }
 
-        log("👆 Vui lòng chạm vân tay hoặc quét Face ID để xác nhận...");
+        log("Vui lòng chạm vân tay hoặc quét Face ID để xác nhận...");
         const asseResp = await startAuthentication({ optionsJSON });
 
-        log("🔄 Đang xác thực chữ ký bảo mật...");
+        log("Đang xác thực chữ ký bảo mật...");
         const verifyRes = await fetch('/api/user/profile/step-up-update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -290,7 +358,7 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
             throw new Error(`Lỗi kết nối máy chủ khi cập nhật hồ sơ (${verifyRes.status})`);
         }
         if (verifyRes.ok && verifyJSON.success) {
-            log("✅ Cập nhật thông tin sinh viên thành công!");
+            log("Cập nhật thông tin sinh viên thành công!");
             return { success: true, profile: verifyJSON.profile, message: verifyJSON.message };
         } else {
             throw new Error(verifyJSON?.error || "Xác thực danh tính thất bại. Không thể cập nhật hồ sơ!");

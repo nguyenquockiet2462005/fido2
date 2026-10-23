@@ -330,6 +330,68 @@ body {
     box-shadow: 0 6px 16px rgba(0, 86, 179, 0.12);
 }
 
+/* Đường phân cách */
+.passkey-divider {
+    display: flex;
+    align-items: center;
+    margin: 16px 0 12px;
+    text-align: center;
+}
+
+.passkey-divider::before,
+.passkey-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.passkey-divider span {
+    padding: 0 12px;
+    color: #94a3b8;
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+/* Nút Đăng nhập nhanh bằng Passkey 1-chạm */
+.btn-passkey-quick {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, #0f3d5e 0%, #0056b3 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.94rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 14px rgba(0, 86, 179, 0.2);
+}
+
+.btn-passkey-quick:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0056b3 0%, #004494 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 86, 179, 0.35);
+}
+
+.btn-passkey-quick:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-passkey-quick:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-passkey-quick svg {
+    flex-shrink: 0;
+}
+
 .btn-unlink {
     background: #fff5f5;
     color: #e11d48;

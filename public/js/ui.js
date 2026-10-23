@@ -5,13 +5,14 @@
  *   student -> workspace.html
  */
 
-import { handleRegister, handleLogin } from './webauthn.js';
+import { handleRegister, handleLogin, handleQuickPasskeyLogin } from './webauthn.js';
 
 // ==========================================
 // DOM ELEMENTS
 // ==========================================
 const btnRegister = document.getElementById('btn-register');
 const btnLogin = document.getElementById('btn-login');
+const btnPasskeyQuick = document.getElementById('btn-passkey-quick');
 const inputUsername = document.getElementById('username');
 const inlinePopup = document.getElementById('inline-popup');
 const inlinePopupText = document.getElementById('inline-popup-text');
@@ -63,6 +64,7 @@ function redirectByRole(role) {
 function setButtonsLoading(isLoading) {
     if (btnRegister) btnRegister.disabled = isLoading;
     if (btnLogin) btnLogin.disabled = isLoading;
+    if (btnPasskeyQuick) btnPasskeyQuick.disabled = isLoading;
 }
 
 // ==========================================
@@ -146,6 +148,37 @@ if (btnLogin) {
             let msg = error.message;
             if (msg.includes('timed out') || msg.includes('not allowed')) {
                 msg = 'Không thể mở xác thực sinh trắc học, vui lòng thử lại!';
+            }
+            showInlinePopup('error', msg, 4000);
+        } finally {
+            setButtonsLoading(false);
+        }
+    });
+}
+
+// ==========================================
+// 4. NÚT ĐĂNG NHẬP NHANH PASSKEY 1-CHẠM (USERNAMELESS)
+// ==========================================
+if (btnPasskeyQuick) {
+    btnPasskeyQuick.addEventListener('click', async () => {
+        setButtonsLoading(true);
+        try {
+            const result = await handleQuickPasskeyLogin(logToInspector);
+            if (result && result.success) {
+                btnPasskeyQuick.classList.add('btn-success-pop');
+                showInlinePopup('success', `Đăng nhập thành công với Passkey! Chào mừng ${result.user?.username || ''}`, 2000);
+
+                setTimeout(() => {
+                    btnPasskeyQuick.classList.remove('btn-success-pop');
+                    // 🛡️ PHÂN QUYỀN: Admin -> Dashboard | Sinh viên -> Workspace
+                    const role = result.user?.role || 'student';
+                    redirectByRole(role);
+                }, 1200);
+            }
+        } catch (error) {
+            let msg = error.message;
+            if (msg.includes('timed out') || msg.includes('not allowed')) {
+                msg = 'Đã hủy thao tác xác thực Passkey.';
             }
             showInlinePopup('error', msg, 4000);
         } finally {

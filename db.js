@@ -291,6 +291,23 @@ export function findUserByUsername(username) {
   return user;
 }
 
+/**
+ * Tìm kiếm người dùng dựa trên mã định danh Passkey (Credential ID)
+ * Phục vụ luồng đăng nhập nhanh Usernameless (Không cần nhập username)
+ */
+export function findUserByCredentialId(credentialId) {
+  if (!credentialId || typeof credentialId !== 'string') return null;
+  const user = users.find(user => 
+    (user.credentials || []).some(cred => cred.id === credentialId)
+  ) || null;
+  if (user && Array.isArray(user.credentials)) {
+    user.credentials.forEach(cred => {
+      cred.publicKey = normalizePublicKey(cred.publicKey);
+    });
+  }
+  return user;
+}
+
 // Hàm tạo một người dùng mới và cất vào kho
 export function createUser(username, customId = null) {
   const cleanUsername = String(username).trim();
