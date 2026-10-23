@@ -262,7 +262,7 @@
                         <path
                             d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72c-.1 0-.2-.03-.29-.09-.23-.16-.28-.47-.12-.7.99-1.4 2.25-2.5 3.75-3.27C9.9 4.04 12 4.04 14.1 4.7c.26.08.41.36.33.62-.08.26-.36.41-.62.33-1.85-.58-3.7-.58-5.46.32-1.33.68-2.45 1.66-3.33 2.91-.1.15-.27.24-.44.24z" />
                     </svg>
-                    Xác Thực Sinh Trắc Học & Lưu
+                    Lưu
                 </button>
             </div>
         </div>
@@ -403,12 +403,12 @@
                 const origText = btnSaveStepUp.innerHTML;
                 btnSaveStepUp.innerText = 'Đang chờ quét vân tay...';
                 closeModal();
-                showProgress('Đang mở cảm biến Touch ID / Face ID để xác thực danh tính...');
+                showProgress('Đang mở cảm biến...');
 
                 try {
                     const result = await handleStepUpUpdateProfile(profileData, msg => showProgress(msg));
                     if (result && result.success) {
-                        showProgress('Hồ sơ sinh viên đã được cập nhật thành công!');
+                        showProgress('Cập nhật thành công!');
                         hideProgress(3000);
                         await loadData();
                     } else {
