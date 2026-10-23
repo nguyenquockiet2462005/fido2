@@ -46,6 +46,47 @@ const DATA_FILE = path.join(DATA_DIR, 'users.json');
 // const users = [];
 let users = [];
 
+/**
+ * CHUẨN HÓA KHÓA CÔNG KHAI (FIDO2 Public Key):
+ * Đảm bảo luôn trả về đúng kiểu `Uint8Array` (77 bytes cho ES256 / COSE Key).
+ * Phòng chống triệt để lỗi `decodedPublicKey.get is not a function` khi đọc từ MongoDB Binary hoặc JSON file.
+ */
+export function normalizePublicKey(pk) {
+  if (!pk) return pk;
+
+  // 1. Đã là Uint8Array hoặc Buffer
+  if (pk instanceof Uint8Array || Buffer.isBuffer(pk)) {
+    return new Uint8Array(pk);
+  }
+
+  // 2. Đối tượng BSON Binary từ MongoDB Atlas
+  if (pk._bsontype === 'Binary' || (pk.buffer && (pk.buffer instanceof Uint8Array || Buffer.isBuffer(pk.buffer) || pk.buffer instanceof ArrayBuffer))) {
+    return new Uint8Array(pk.buffer);
+  }
+  if (typeof pk.value === 'function') {
+    const val = pk.value(true);
+    if (val) return new Uint8Array(val);
+  }
+
+  // 3. Chuỗi Base64
+  if (typeof pk === 'string') {
+    return new Uint8Array(Buffer.from(pk, 'base64'));
+  }
+
+  // 4. Mảng thông thường
+  if (Array.isArray(pk)) {
+    return new Uint8Array(pk);
+  }
+
+  // 5. Object được JSON.parse từ Uint8Array: { "0": 165, "1": 1, ... }
+  if (typeof pk === 'object') {
+    const values = Object.values(pk);
+    return new Uint8Array(values);
+  }
+
+  return pk;
+}
+
 // ==========================================
 // 1. CÁC HÀM ĐỒNG BỘ DỮ LIỆU (DUAL-ENGINE: LOCAL FILE + CLOUD MONGODB)
 // ==========================================
@@ -80,7 +121,13 @@ async function syncUsersToCloud() {
       const ops = users.map(u => ({
         replaceOne: {
           filter: { id: u.id },
-          replacement: { ...u },
+          replacement: {
+            ...u,
+            credentials: (u.credentials || []).map(c => ({
+              ...c,
+              publicKey: normalizePublicKey(c.publicKey)
+            }))
+          },
           upsert: true
         }
       }));
@@ -131,7 +178,7 @@ export async function initMongoDB() {
           ...rest,
           credentials: (rest.credentials || []).map(cred => ({
             ...cred,
-            publicKey: cred.publicKey ? new Uint8Array(Object.values(cred.publicKey)) : cred.publicKey,
+            publicKey: normalizePublicKey(cred.publicKey),
           }))
         };
       });
@@ -172,7 +219,7 @@ function loadUsersFromFile() {
         },
         credentials: (user.credentials || []).map(cred => ({
           ...cred,
-          publicKey: cred.publicKey ? new Uint8Array(Object.values(cred.publicKey)) : cred.publicKey,
+          publicKey: normalizePublicKey(cred.publicKey),
         }))
       }));
       console.log(`📦 [DB] Đã khôi phục và chuẩn hóa thành công ${users.length} tài khoản từ data/users.json`);
@@ -235,7 +282,13 @@ seedAdminUser();
 export function findUserByUsername(username) {
   if (!username || typeof username !== 'string') return null;
   const normalized = username.trim().toLowerCase();
-  return users.find((user) => user.username.toLowerCase() === normalized) || null;
+  const user = users.find((user) => user.username.toLowerCase() === normalized) || null;
+  if (user && Array.isArray(user.credentials)) {
+    user.credentials.forEach(cred => {
+      cred.publicKey = normalizePublicKey(cred.publicKey);
+    });
+  }
+  return user;
 }
 
 // Hàm tạo một người dùng mới và cất vào kho
@@ -286,7 +339,10 @@ export function addCredentialToUser(username, credentialInfo) {
   if (!Array.isArray(user.credentials)) {
     user.credentials = [];
   }
-  user.credentials.push(credentialInfo); //nhét chìa khoá mới vào mảng creadentials của người đó
+  user.credentials.push({
+    ...credentialInfo,
+    publicKey: normalizePublicKey(credentialInfo.publicKey)
+  }); //nhét chìa khoá mới vào mảng creadentials của người đó
   saveUsersToFile(); // Tự động lưu
   return user;
 }

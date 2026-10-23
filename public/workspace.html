@@ -403,12 +403,12 @@
                 const origText = btnSaveStepUp.innerHTML;
                 btnSaveStepUp.innerText = 'Đang chờ quét vân tay...';
                 closeModal();
-                showProgress('🔐 Đang mở cảm biến Touch ID / Face ID để xác thực danh tính...');
+                showProgress('Đang mở cảm biến Touch ID / Face ID để xác thực danh tính...');
 
                 try {
                     const result = await handleStepUpUpdateProfile(profileData, msg => showProgress(msg));
                     if (result && result.success) {
-                        showProgress('✅ Hồ sơ sinh viên đã được cập nhật thành công!');
+                        showProgress('Hồ sơ sinh viên đã được cập nhật thành công!');
                         hideProgress(3000);
                         await loadData();
                     } else {
