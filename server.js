@@ -8,6 +8,11 @@
  * 4. Cung cấp các API kiểm tra trạng thái an toàn (Health check & Phân quyền Admin).
  */
 
+// Tự động nạp file .env nếu có (Node.js 20+)
+if (typeof process.loadEnvFile === 'function') {
+  try { process.loadEnvFile(); } catch (_) {}
+}
+
 import express from 'express';
 import session from 'express-session';
 import path from 'path';

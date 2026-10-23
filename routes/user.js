@@ -245,11 +245,11 @@ router.post('/profile/step-up-update', async (req, res) => {
             expectedChallenge,
             expectedOrigin: expectedOrigins,
             expectedRPID: expectedRPIDs,
-            authenticator: {
-                credentialID: currentDevice.id,
-                credentialPublicKey: currentDevice.publicKey,
+            credential: {
+                id: currentDevice.id,
+                publicKey: currentDevice.publicKey,
                 counter: currentDevice.counter,
-                transports: currentDevice.transports,
+                transports: currentDevice.transports || [],
             },
             requireUserVerification: false,
         });
