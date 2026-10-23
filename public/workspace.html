@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HUTECH | Student Workspace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="css/workspace.css">
     <script src="/vendor/simplewebauthn-browser.min.js"></script>
     <script>
@@ -14,6 +16,7 @@
         }
     </script>
 </head>
+
 <body>
     <div class="ws-wrapper">
         <!-- HEADER -->
@@ -21,7 +24,7 @@
             <div class="ws-header-left">
                 <div class="hutech-logo">
                     <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
-                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
                     </svg>
                 </div>
                 <div>
@@ -32,11 +35,15 @@
             </div>
             <div class="ws-header-right">
                 <div class="user-pill">
-                    <img id="ws-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user" alt="Avatar" class="ws-avatar-mini">
+                    <img id="ws-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user" alt="Avatar"
+                        class="ws-avatar-mini">
                     <span id="ws-fullname">Đang tải...</span>
                 </div>
                 <button class="ws-btn-logout" onclick="logout()">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                        <path
+                            d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+                    </svg>
                     Đăng xuất
                 </button>
             </div>
@@ -47,7 +54,10 @@
             <!-- SIDEBAR ICONS -->
             <aside class="ws-sidebar">
                 <button class="ws-side-btn active" title="Hồ sơ">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path
+                            d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                    </svg>
                 </button>
             </aside>
 
@@ -57,7 +67,8 @@
                 <div class="ws-banner">
                     <div class="ws-banner-text">
                         <h1>Xin chào, <span id="ws-shortname">Bạn</span> 👋</h1>
-                        <p>Chào mừng đến <strong>Student Workspace HUTECH</strong> - Hệ thống bảo vệ danh tính FIDO2 Passkey</p>
+                        <p>Chào mừng đến <strong>Student Workspace HUTECH</strong> - Hệ thống bảo vệ danh tính FIDO2
+                            Passkey</p>
                     </div>
                 </div>
 
@@ -67,13 +78,17 @@
                     <div class="ws-card">
                         <div class="ws-card-header">
                             <div class="ws-card-icon icon-blue">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 2.75c1.24 0 2.25 1.01 2.25 2.25s-1.01 2.25-2.25 2.25S9.75 10.24 9.75 9 10.76 6.75 12 6.75zM17 17H7v-.75c0-1.66 3.34-2.5 5-2.5s5 .84 5 2.5V17z"/></svg>
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
+                                    <path
+                                        d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 2.75c1.24 0 2.25 1.01 2.25 2.25s-1.01 2.25-2.25 2.25S9.75 10.24 9.75 9 10.76 6.75 12 6.75zM17 17H7v-.75c0-1.66 3.34-2.5 5-2.5s5 .84 5 2.5V17z" />
+                                </svg>
                             </div>
                             <h3>Hồ Sơ Sinh Viên</h3>
                         </div>
 
                         <div class="ws-avatar-section">
-                            <img id="ws-profile-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user" alt="Avatar" class="ws-profile-avatar">
+                            <img id="ws-profile-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=user"
+                                alt="Avatar" class="ws-profile-avatar">
                             <div class="ws-username-badge">@<span id="ws-username">--</span></div>
                         </div>
 
@@ -102,14 +117,20 @@
 
                         <!-- Trạng thái xác thực FIDO2 Step-Up -->
                         <div id="card-status" class="ws-card-status verified">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
-                            <span id="card-status-text">Xác thực nâng cao (Step-Up FIDO2) đang kích hoạt</span>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                <path
+                                    d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                            </svg>
+                            <span id="card-status-text">Xác thực nâng cao đang được kích hoạt</span>
                         </div>
 
                         <!-- NÚT MỞ MODAL CHỈNH SỬA THÔNG TIN BẢO MẬT -->
                         <button type="button" id="btn-open-edit" class="ws-btn-primary">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                            <span>Chỉnh Sửa Hồ Sơ (Step-Up FIDO2)</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path
+                                    d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                            </svg>
+                            <span>Chỉnh Sửa Hồ Sơ</span>
                         </button>
 
                         <div id="ws-scan-progress" class="ws-scan-progress" style="display: none;"></div>
@@ -121,7 +142,10 @@
                         <div class="ws-card">
                             <div class="ws-card-header">
                                 <div class="ws-card-icon icon-purple">
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
+                                        <path
+                                            d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+                                    </svg>
                                 </div>
                                 <h3>Cơ Chế Step-Up Authentication</h3>
                             </div>
@@ -130,14 +154,16 @@
                                     <div class="notify-dot dot-green"></div>
                                     <div>
                                         <div class="notify-title">Bảo vệ thao tác nhạy cảm</div>
-                                        <div class="notify-sub">Mọi thay đổi thông tin quan trọng (Họ tên, MSSV, Khoa) đều bắt buộc ký duyệt bằng sinh trắc học FIDO2.</div>
+                                        <div class="notify-sub">Mọi thay đổi thông tin quan trọng (Họ tên, MSSV, Khoa)
+                                            đều bắt buộc ký duyệt bằng sinh trắc học FIDO2.</div>
                                     </div>
                                 </div>
                                 <div class="ws-notify-item">
                                     <div class="notify-dot dot-blue"></div>
                                     <div>
                                         <div class="notify-title">Chống chiếm quyền phiên (Session Hijacking)</div>
-                                        <div class="notify-sub">Dù ai đó mượn máy tính đang đăng nhập của bạn, họ không thể sửa đổi hồ sơ nếu không có vân tay chính chủ.</div>
+                                        <div class="notify-sub">Dù ai đó mượn máy tính đang đăng nhập của bạn, họ không
+                                            thể sửa đổi hồ sơ nếu không có vân tay chính chủ.</div>
                                     </div>
                                 </div>
                             </div>
@@ -147,7 +173,9 @@
                         <div class="ws-card ws-security-card">
                             <div class="ws-card-header">
                                 <div class="ws-card-icon icon-green">
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
+                                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+                                    </svg>
                                 </div>
                                 <h3>Trạng Thái Bảo Mật</h3>
                             </div>
@@ -181,7 +209,9 @@
         <div class="ws-modal-card">
             <div class="ws-modal-header">
                 <div class="ws-modal-title">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+                    </svg>
                     Chỉnh Sửa Hồ Sơ Sinh Viên
                 </div>
                 <button type="button" class="ws-modal-close" id="btn-close-edit">&times;</button>
@@ -190,13 +220,16 @@
                 <div class="stepup-notice">
                     <span class="stepup-notice-icon">🛡️</span>
                     <div>
-                        <strong>Xác thực nâng cao (Step-Up FIDO2):</strong> Thao tác thay đổi thông tin sinh viên được bảo vệ bằng chữ ký mật mã FIDO2. Khi bấm lưu, hệ thống sẽ yêu cầu quét vân tay Touch ID / Windows Hello để xác nhận bạn chính là chủ tài khoản.
+                        <strong>Xác thực nâng cao (Step-Up FIDO2):</strong> Thao tác thay đổi thông tin sinh viên được
+                        bảo vệ bằng chữ ký mật mã FIDO2. Khi bấm lưu, hệ thống sẽ yêu cầu quét vân tay Touch ID /
+                        Windows Hello để xác nhận bạn chính là chủ tài khoản.
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Họ và Tên</label>
-                    <input type="text" id="edit-fullname" class="form-input" placeholder="Nguyễn Văn A" autocomplete="off" />
+                    <input type="text" id="edit-fullname" class="form-input" placeholder="Nguyễn Văn A"
+                        autocomplete="off" />
                 </div>
 
                 <div class="form-group">
@@ -211,18 +244,24 @@
 
                 <div class="form-group">
                     <label class="form-label">Khoa / Viện đào tạo</label>
-                    <input type="text" id="edit-faculty" class="form-input" placeholder="Công nghệ thông tin" autocomplete="off" />
+                    <input type="text" id="edit-faculty" class="form-input" placeholder="Công nghệ thông tin"
+                        autocomplete="off" />
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Khóa Học / Niên Khóa</label>
-                    <input type="text" id="edit-year" class="form-input" placeholder="Khóa 2021 - 2025" autocomplete="off" />
+                    <input type="text" id="edit-year" class="form-input" placeholder="Khóa 2021 - 2025"
+                        autocomplete="off" />
                 </div>
             </div>
             <div class="ws-modal-footer">
                 <button type="button" class="ws-btn-secondary" id="btn-cancel-edit">Hủy</button>
-                <button type="button" class="ws-btn-primary" id="btn-save-stepup" style="width: auto; padding: 10px 20px;">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72c-.1 0-.2-.03-.29-.09-.23-.16-.28-.47-.12-.7.99-1.4 2.25-2.5 3.75-3.27C9.9 4.04 12 4.04 14.1 4.7c.26.08.41.36.33.62-.08.26-.36.41-.62.33-1.85-.58-3.7-.58-5.46.32-1.33.68-2.45 1.66-3.33 2.91-.1.15-.27.24-.44.24z"/></svg>
+                <button type="button" class="ws-btn-primary" id="btn-save-stepup"
+                    style="width: auto; padding: 10px 20px;">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path
+                            d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72c-.1 0-.2-.03-.29-.09-.23-.16-.28-.47-.12-.7.99-1.4 2.25-2.5 3.75-3.27C9.9 4.04 12 4.04 14.1 4.7c.26.08.41.36.33.62-.08.26-.36.41-.62.33-1.85-.58-3.7-.58-5.46.32-1.33.68-2.45 1.66-3.33 2.91-.1.15-.27.24-.44.24z" />
+                    </svg>
                     Xác Thực Sinh Trắc Học & Lưu
                 </button>
             </div>
@@ -232,18 +271,18 @@
     <script type="module">
         import { handleStepUpUpdateProfile } from './js/webauthn.js';
 
-        const btnOpenEdit   = document.getElementById('btn-open-edit');
-        const modalEdit     = document.getElementById('modal-edit-profile');
-        const btnCloseEdit  = document.getElementById('btn-close-edit');
+        const btnOpenEdit = document.getElementById('btn-open-edit');
+        const modalEdit = document.getElementById('modal-edit-profile');
+        const btnCloseEdit = document.getElementById('btn-close-edit');
         const btnCancelEdit = document.getElementById('btn-cancel-edit');
         const btnSaveStepUp = document.getElementById('btn-save-stepup');
-        const scanProgress  = document.getElementById('ws-scan-progress');
+        const scanProgress = document.getElementById('ws-scan-progress');
 
         const editFullname = document.getElementById('edit-fullname');
-        const editMssv     = document.getElementById('edit-mssv');
-        const editDob      = document.getElementById('edit-dob');
-        const editFaculty  = document.getElementById('edit-faculty');
-        const editYear     = document.getElementById('edit-year');
+        const editMssv = document.getElementById('edit-mssv');
+        const editDob = document.getElementById('edit-dob');
+        const editFaculty = document.getElementById('edit-faculty');
+        const editYear = document.getElementById('edit-year');
 
         let currentUser = null;
 
@@ -268,10 +307,10 @@
         function openModal() {
             if (currentUser) {
                 editFullname.value = currentUser.profile?.fullName || currentUser.hoTen || '';
-                editMssv.value     = currentUser.profile?.studentId || '';
-                editDob.value      = currentUser.profile?.dob || currentUser.ngaySinh || '';
-                editFaculty.value  = currentUser.profile?.faculty || '';
-                editYear.value     = currentUser.profile?.academicYear || '';
+                editMssv.value = currentUser.profile?.studentId || '';
+                editDob.value = currentUser.profile?.dob || currentUser.ngaySinh || '';
+                editFaculty.value = currentUser.profile?.faculty || '';
+                editYear.value = currentUser.profile?.academicYear || '';
             }
             modalEdit.classList.add('active');
             editFullname.focus();
@@ -369,15 +408,18 @@
                 try {
                     const result = await handleStepUpUpdateProfile(profileData, msg => showProgress(msg));
                     if (result && result.success) {
-                        showProgress('✅ Xác thực FIDO2 thành công! Hồ sơ sinh viên đã được cập nhật.');
-                        hideProgress(3500);
+                        showProgress('✅ Hồ sơ sinh viên đã được cập nhật thành công!');
+                        hideProgress(3000);
                         await loadData();
                     } else {
-                        throw new Error(result?.error || 'Xác thực Step-Up thất bại.');
+                        const errMsg = result?.error || 'Xác thực thất bại.';
+                        const isCancel = errMsg.includes('Đã hủy');
+                        showProgress(isCancel ? 'ℹ️ ' + errMsg : '❌ ' + errMsg, !isCancel);
+                        hideProgress(4000);
                     }
                 } catch (err) {
-                    showProgress('❌ Lỗi: ' + err.message, true);
-                    hideProgress(5000);
+                    showProgress('❌ ' + err.message, true);
+                    hideProgress(4000);
                 } finally {
                     btnSaveStepUp.disabled = false;
                     btnSaveStepUp.innerHTML = origText;
@@ -395,4 +437,5 @@
         loadData();
     </script>
 </body>
+
 </html>

@@ -251,7 +251,7 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
     }
 
     try {
-        log("🟡 Bước 1/3: Đang yêu cầu Server cấp Challenge bảo mật FIDO2...");
+        log("🔐 Đang chuẩn bị phiên xác thực...");
         const optionsRes = await fetch('/api/user/profile/step-up-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -270,10 +270,10 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
             throw new Error(optionsJSON?.error || `Lỗi máy chủ (${optionsRes.status})`);
         }
 
-        log("🟢 Bước 2/3: Mời quét vân tay Touch ID / Face ID / Windows Hello để ký xác nhận...");
+        log("👆 Vui lòng chạm vân tay hoặc quét Face ID để xác nhận...");
         const asseResp = await startAuthentication({ optionsJSON });
 
-        log("🔵 Bước 3/3: Đã tạo chữ ký số sinh trắc học, đang gửi Server kiểm chứng & lưu hồ sơ...");
+        log("🔄 Đang xác thực chữ ký bảo mật...");
         const verifyRes = await fetch('/api/user/profile/step-up-update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -290,7 +290,7 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
             throw new Error(`Lỗi kết nối máy chủ khi cập nhật hồ sơ (${verifyRes.status})`);
         }
         if (verifyRes.ok && verifyJSON.success) {
-            log("✅ Xác thực sinh trắc học thành công! Hồ sơ đã được cập nhật an toàn.");
+            log("✅ Cập nhật thông tin sinh viên thành công!");
             return { success: true, profile: verifyJSON.profile, message: verifyJSON.message };
         } else {
             throw new Error(verifyJSON?.error || "Xác thực danh tính thất bại. Không thể cập nhật hồ sơ!");
@@ -304,7 +304,12 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
         ) {
             customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
         }
-        log("❌ [XÁC THỰC THẤT BẠI]: " + customMsg);
+
+        if (customMsg.includes("Đã hủy")) {
+            log("ℹ️ " + customMsg);
+        } else {
+            log("❌ " + customMsg);
+        }
         return { success: false, error: customMsg };
     }
 }
