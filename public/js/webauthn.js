@@ -237,3 +237,75 @@ export async function handleStepUpUnlinkCard(logCallback) {
         return { success: false, error: customMsg };
     }
 }
+
+// ==========================================
+// 5. LUỒNG XÁC THỰC NÂNG CAO (STEP-UP AUTH) ĐỂ CẬP NHẬT HỒ SƠ SINH VIÊN
+// ==========================================
+export async function handleStepUpUpdateProfile(profileData, logCallback) {
+    const log = typeof logCallback === 'function' ? logCallback : console.log;
+    const { startAuthentication } = window.SimpleWebAuthnBrowser || {};
+    if (!startAuthentication) {
+        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
+        log("❌ " + errorMsg);
+        return { success: false, error: errorMsg };
+    }
+
+    try {
+        log("🟡 Bước 1/3: Đang yêu cầu Server cấp Challenge bảo mật FIDO2...");
+        const optionsRes = await fetch('/api/user/profile/step-up-options', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        let optionsJSON;
+        try {
+            optionsJSON = await optionsRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
+        }
+        if (optionsRes.status === 401) {
+            throw new Error("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!");
+        }
+        if (!optionsRes.ok || optionsJSON.error) {
+            throw new Error(optionsJSON?.error || `Lỗi máy chủ (${optionsRes.status})`);
+        }
+
+        log("🟢 Bước 2/3: Mời quét vân tay Touch ID / Face ID / Windows Hello để ký xác nhận...");
+        const asseResp = await startAuthentication({ optionsJSON });
+
+        log("🔵 Bước 3/3: Đã tạo chữ ký số sinh trắc học, đang gửi Server kiểm chứng & lưu hồ sơ...");
+        const verifyRes = await fetch('/api/user/profile/step-up-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                response: asseResp,
+                profileData
+            })
+        });
+
+        let verifyJSON;
+        try {
+            verifyJSON = await verifyRes.json();
+        } catch (_) {
+            throw new Error(`Lỗi kết nối máy chủ khi cập nhật hồ sơ (${verifyRes.status})`);
+        }
+        if (verifyRes.ok && verifyJSON.success) {
+            log("✅ Xác thực sinh trắc học thành công! Hồ sơ đã được cập nhật an toàn.");
+            return { success: true, profile: verifyJSON.profile, message: verifyJSON.message };
+        } else {
+            throw new Error(verifyJSON?.error || "Xác thực danh tính thất bại. Không thể cập nhật hồ sơ!");
+        }
+    } catch (error) {
+        let customMsg = error.message;
+        if (
+            error.name === 'NotAllowedError' ||
+            customMsg.includes('timed out') ||
+            customMsg.includes('not allowed')
+        ) {
+            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
+        }
+        log("❌ [XÁC THỰC THẤT BẠI]: " + customMsg);
+        return { success: false, error: customMsg };
+    }
+}
+

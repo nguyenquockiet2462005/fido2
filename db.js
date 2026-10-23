@@ -454,3 +454,28 @@ export function unlinkStudentCard(username) {
   return user.profile;
 }
 
+/**
+ * BẢO MẬT: Cập nhật hồ sơ sinh viên sau khi đã xác thực nâng cao Step-Up FIDO2
+ */
+export function updateUserProfile(username, updatedData) {
+  const user = findUserByUsername(username);
+  if (!user) {
+    throw new Error(`Không tìm thấy tài khoản: ${username}`);
+  }
+
+  user.profile = {
+    ...user.profile,
+    fullName: updatedData.fullName || user.profile?.fullName || user.username,
+    studentId: updatedData.studentId !== undefined ? updatedData.studentId : user.profile?.studentId || '',
+    dob: updatedData.dob !== undefined ? updatedData.dob : user.profile?.dob || '',
+    faculty: updatedData.faculty !== undefined ? updatedData.faculty : user.profile?.faculty || '',
+    academicYear: updatedData.academicYear !== undefined ? updatedData.academicYear : user.profile?.academicYear || '',
+    university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+    updatedAt: new Date().toISOString()
+  };
+
+  saveUsersToFile();
+  return user.profile;
+}
+
+
