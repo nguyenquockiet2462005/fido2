@@ -39,7 +39,8 @@ async function resetDatabase() {
       await client.connect();
       const db = client.db('fido2_db');
       const res = await db.collection('users').deleteMany({});
-      console.log(`✅ [CLOUD] Đã xóa thành công ${res.deletedCount} tài khoản trên MongoDB Atlas!`);
+      const resSessions = await db.collection('sessions').deleteMany({});
+      console.log(`✅ [CLOUD] Đã xóa thành công ${res.deletedCount} tài khoản và ${resSessions.deletedCount} phiên session trên MongoDB Atlas!`);
       await client.close();
     } catch (err) {
       console.error('⚠️ [CLOUD] Lỗi kết nối MongoDB Atlas:', err.message);

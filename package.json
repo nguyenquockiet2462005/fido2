@@ -15,7 +15,9 @@
   "dependencies": {
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
+    "connect-mongo": "^6.0.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
     "express-session": "^1.19.0",
     "mongodb": "^7.7.0"
   }
