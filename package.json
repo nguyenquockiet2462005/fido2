@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "reset-db": "node --env-file=.env reset-db.js"
+    "reset-db": "node --env-file=.env reset-db.js",
+    "test": "node --env-file=.env tests/security.test.mjs"
   },
   "keywords": [],
   "author": "",

@@ -21,13 +21,28 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
         return { success: false, error: errorMsg };
     }
 
+    // BẢO MẬT (C2): Khóa quyền khởi tạo Admin lần đầu bằng token bảo mật
+    let setupToken = '';
+    if (username && username.trim().toLowerCase() === 'admin') {
+        const inputToken = window.prompt("🛡️ KHỞI TẠO TÀI KHOẢN ADMIN:\nVui lòng nhập mã bảo vệ cài đặt Admin (ADMIN_SETUP_TOKEN):");
+        if (inputToken === null) {
+            log("❌ Đã hủy thao tác đăng ký Admin.");
+            return { success: false, error: "Đã hủy thao tác cài đặt Admin." };
+        }
+        setupToken = inputToken.trim();
+        if (!setupToken) {
+            log("❌ Chưa nhập mã cài đặt Admin.");
+            return { success: false, error: "Cần mã cài đặt Admin để tiếp tục!" };
+        }
+    }
+
     try {
         log("🟡 Đang gửi yêu cầu xin Challenge từ Server...");
 
         const optionsRes = await fetch('/api/auth/register-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, hoTen, ngaySinh })
+            body: JSON.stringify({ username, hoTen, ngaySinh, setupToken })
         });
 
         let optionsJSON;
@@ -239,75 +254,7 @@ export async function handleLogout(logCallback) {
 }
 
 // ==========================================
-// 4. LUỒNG XÁC THỰC LẠI (STEP-UP AUTH) ĐỂ HỦY LIÊN KẾT THẺ
-// ==========================================
-export async function handleStepUpUnlinkCard(logCallback) {
-    const log = typeof logCallback === 'function' ? logCallback : console.log;
-    const { startAuthentication } = window.SimpleWebAuthnBrowser || {};
-    if (!startAuthentication) {
-        const errorMsg = "Không tìm thấy thư viện SimpleWebAuthnBrowser!";
-        log("❌ " + errorMsg);
-        return { success: false, error: errorMsg };
-    }
-
-    try {
-        log("🟡 Bước 1/3: Đang yêu cầu Server cấp Challenge bảo mật để hủy thẻ...");
-        const optionsRes = await fetch('/api/user/profile/unlink-card-options', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        let optionsJSON;
-        try {
-            optionsJSON = await optionsRes.json();
-        } catch (_) {
-            throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
-        }
-        if (optionsRes.status === 401) {
-            throw new Error("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!");
-        }
-        if (!optionsRes.ok || optionsJSON.error) {
-            throw new Error(optionsJSON?.error || `Lỗi máy chủ (${optionsRes.status})`);
-        }
-
-        log("🟢 Bước 2/3: Đã nhận Challenge. Mời quét vân tay / Face ID / Windows Hello để xác thực...");
-        const asseResp = await startAuthentication({ optionsJSON });
-
-        log("🔵 Bước 3/3: Đã tạo chữ ký sinh trắc học, đang gửi Server kiểm tra...");
-        const verifyRes = await fetch('/api/user/profile/unlink-card-verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ response: asseResp })
-        });
-
-        let verifyJSON;
-        try {
-            verifyJSON = await verifyRes.json();
-        } catch (_) {
-            throw new Error(`Lỗi kết nối máy chủ khi hủy thẻ (${verifyRes.status})`);
-        }
-        if (verifyRes.ok && verifyJSON.success) {
-            log("✅ Xác thực sinh trắc học thành công! Thẻ sinh viên đã được hủy an toàn.");
-            return { success: true, profile: verifyJSON.profile };
-        } else {
-            throw new Error(verifyJSON?.error || "Xác thực danh tính thất bại. Không thể hủy liên kết thẻ!");
-        }
-    } catch (error) {
-        let customMsg = error.message;
-        if (
-            error.name === 'NotAllowedError' ||
-            customMsg.includes('timed out') ||
-            customMsg.includes('not allowed')
-        ) {
-            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
-        }
-        log("❌ [HỦY THẺ THẤT BẠI]: " + customMsg);
-        return { success: false, error: customMsg };
-    }
-}
-
-// ==========================================
-// 5. LUỒNG XÁC THỰC NÂNG CAO (STEP-UP AUTH) ĐỂ CẬP NHẬT HỒ SƠ SINH VIÊN
+// 4. LUỒNG XÁC THỰC NÂNG CAO (STEP-UP AUTH) ĐỂ CẬP NHẬT HỒ SƠ SINH VIÊN
 // ==========================================
 export async function handleStepUpUpdateProfile(profileData, logCallback) {
     const log = typeof logCallback === 'function' ? logCallback : console.log;

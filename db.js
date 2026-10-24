@@ -290,7 +290,7 @@ export function findUserByUsername(username) {
  */
 export function findUserByCredentialId(credentialId) {
   if (!credentialId || typeof credentialId !== 'string') return null;
-  const user = users.find(user => 
+  const user = users.find(user =>
     (user.credentials || []).some(cred => cred.id === credentialId)
   ) || null;
   if (user && Array.isArray(user.credentials)) {
@@ -417,110 +417,6 @@ export function getAllUsers() {
 // Hàm getAllUsers() để làm gì?
 // Đơn giản là trả về toàn bộ mảng users.
 // Nhóm bạn và Người 4 (UI) có thể gọi hàm này để in danh sách tài khoản ra giao diện web, giúp thầy cô khi chấm bài nhìn thấy tận mắt chiếc chìa khóa (Public Key) vừa được lưu vào RAM như thế nào.
-
-/**
- * Hàm tìm người dùng theo Mã Số Sinh Viên (MSSV)
- */
-export function findUserByStudentId(studentId) {
-  if (!studentId) return null;
-  return users.find(u => u.profile && u.profile.studentId === studentId) || null;
-}
-
-/**
- * HÀM CỐT LÕI: Xác thực & Thu hồi quyền sở hữu danh tính khi có Thẻ Vật Lý
- * (Physical Proof Ownership & Identity Reclamation)
- */
-export function claimStudentIdentity(currentUsername, cardData) {
-  const currentUser = findUserByUsername(currentUsername);
-  if (!currentUser) {
-    throw new Error(`Không tìm thấy tài khoản: ${currentUsername}`);
-  }
-
-  const { studentId, fullName, dob, academicYear, faculty } = cardData;
-  if (!studentId) {
-    throw new Error('Thiếu mã số sinh viên (MSSV) hợp lệ từ thẻ!');
-  }
-
-  // 1. KIỂM TRA AN NINH: Tài khoản này ĐÃ ĐƯỢC XÁC THỰC THẺ trước đó chưa?
-  if (currentUser.profile && currentUser.profile.isVerifiedCard && currentUser.profile.studentId) {
-    if (currentUser.profile.studentId !== studentId) {
-      throw new Error(`Tài khoản này đã được xác thực với MSSV ${currentUser.profile.studentId}. Bạn không thể liên kết thẻ của sinh viên khác!`);
-    }
-    // Nếu quét lại cùng MSSV -> Cho phép chạy tiếp xuống bước dưới để cập nhật lại thông tin OCR mới nhất!
-  }
-
-  let revokedFakeAccount = null;
-
-  // 2. Kiểm tra xem MSSV này đã bị tài khoản nào khác chiếm dụng chưa
-  const existingOwner = findUserByStudentId(studentId);
-
-  if (existingOwner && existingOwner.username !== currentUsername) {
-    // Trường hợp A: Tài khoản đó ĐÃ XÁC THỰC THẺ TRƯỚC ĐÓ (isVerifiedCard == true)
-    if (existingOwner.profile && existingOwner.profile.isVerifiedCard) {
-      throw new Error(`Mã số sinh viên ${studentId} đã được kích hoạt bởi tài khoản chính chủ khác (${existingOwner.username})!`);
-    }
-
-    // Trường hợp B: Tài khoản mạo danh chưa xác thực -> Thu hồi và xóa bỏ
-    revokedFakeAccount = existingOwner.username;
-    console.warn(`🚨 [THU HỒI DANH TÍNH] Phát hiện tài khoản mạo danh "${revokedFakeAccount}" chiếm giữ MSSV ${studentId}. Tiến hành xóa bỏ!`);
-    users = users.filter(u => u.username !== existingOwner.username);
-  }
-
-  // 2b. Kiểm tra xem có tài khoản nào đăng ký Username trùng MSSV này mà chưa xác thực không
-  const usernameSquatter = findUserByUsername(studentId);
-  if (usernameSquatter && usernameSquatter.username !== currentUsername && (!usernameSquatter.profile || !usernameSquatter.profile.isVerifiedCard)) {
-    console.warn(`🚨 [THU HỒI DANH TÍNH] Phát hiện tài khoản chiếm dụng username MSSV "${studentId}". Tiến hành giải phóng!`);
-    if (!revokedFakeAccount) revokedFakeAccount = usernameSquatter.username;
-    users = users.filter(u => u.username !== usernameSquatter.username);
-  }
-
-  // 3. Gán/Cập nhật thông tin thẻ chính chủ cho tài khoản
-  currentUser.profile = {
-    ...currentUser.profile,
-    fullName: fullName || currentUser.profile.fullName || currentUser.username,
-    studentId: studentId,
-    dob: dob || currentUser.profile.dob || '',
-    academicYear: academicYear || currentUser.profile.academicYear || '',
-    faculty: faculty || currentUser.profile.faculty || '',
-    university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
-    isVerifiedCard: true,
-    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${studentId}`,
-    verifiedAt: currentUser.profile.verifiedAt || new Date().toISOString()
-  };
-
-  saveUsersToFile();
-
-  return {
-    success: true,
-    profile: currentUser.profile,
-    revokedFakeAccount
-  };
-}
-
-/**
- * Hàm HỦY LIÊN KẾT THẺ SINH VIÊN (Khi người dùng muốn đổi sang thẻ mới)
- */
-export function unlinkStudentCard(username) {
-  const user = findUserByUsername(username);
-  if (!user) {
-    throw new Error(`Không tìm thấy tài khoản: ${username}`);
-  }
-
-  user.profile = {
-    fullName: user.username,
-    studentId: '',
-    dob: '',
-    academicYear: '',
-    faculty: '',
-    university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
-    isVerifiedCard: false,
-    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`,
-    verifiedAt: null
-  };
-
-  saveUsersToFile();
-  return user.profile;
-}
 
 /**
  * BẢO MẬT: Cập nhật hồ sơ sinh viên sau khi đã xác thực nâng cao Step-Up FIDO2

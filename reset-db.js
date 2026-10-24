@@ -11,7 +11,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DATA_FILE = path.join(__dirname, 'data', 'users.json');
-const uri = process.env.MONGODB_URI || 'mongodb+srv://nguyenquockiet2462005_db_user:jbKLpCh69X0i65gl@portfolio-dev-cluster.ljimfa7.mongodb.net/fido2_db?retryWrites=true&w=majority';
+// BẢO MẬT (CWE-798): Không hardcode chuỗi kết nối. Chỉ đọc từ biến môi trường (.env)
+const uri = process.env.MONGODB_URI;
+if (!uri) {
+  console.error('❌ Thiếu MONGODB_URI. Hãy chạy bằng: npm run reset-db -- --yes (script đã tự nạp .env)');
+  process.exit(1);
+}
+
+// An toàn: .env local thường trỏ cùng cluster với Render nên lệnh này xóa cả dữ liệu thật
+if (!process.argv.includes('--yes')) {
+  console.error('⚠️ Lệnh này XÓA TOÀN BỘ tài khoản và phiên trên database đang trỏ tới.');
+  console.error('   Nếu chắc chắn, chạy lại với: npm run reset-db -- --yes');
+  process.exit(1);
+}
 
 async function resetDatabase() {
   console.log('====================================================');
@@ -31,20 +43,18 @@ async function resetDatabase() {
   }
 
   // 2. Dọn dẹp trên MongoDB Atlas Cloud
-  if (uri) {
-    try {
-      console.log('🔄 [CLOUD] Đang kết nối tới MongoDB Atlas để xóa tài khoản...');
-      const { MongoClient } = await import('mongodb');
-      const client = new MongoClient(uri);
-      await client.connect();
-      const db = client.db('fido2_db');
-      const res = await db.collection('users').deleteMany({});
-      const resSessions = await db.collection('sessions').deleteMany({});
-      console.log(`✅ [CLOUD] Đã xóa thành công ${res.deletedCount} tài khoản và ${resSessions.deletedCount} phiên session trên MongoDB Atlas!`);
-      await client.close();
-    } catch (err) {
-      console.error('⚠️ [CLOUD] Lỗi kết nối MongoDB Atlas:', err.message);
-    }
+  try {
+    console.log('🔄 [CLOUD] Đang kết nối tới MongoDB Atlas để xóa tài khoản...');
+    const { MongoClient } = await import('mongodb');
+    const client = new MongoClient(uri);
+    await client.connect();
+    const db = client.db('fido2_db');
+    const res = await db.collection('users').deleteMany({});
+    const resSessions = await db.collection('sessions').deleteMany({});
+    console.log(`✅ [CLOUD] Đã xóa thành công ${res.deletedCount} tài khoản và ${resSessions.deletedCount} phiên session trên MongoDB Atlas!`);
+    await client.close();
+  } catch (err) {
+    console.error('⚠️ [CLOUD] Lỗi kết nối MongoDB Atlas:', err.message);
   }
 
   console.log('====================================================');

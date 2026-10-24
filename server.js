@@ -10,7 +10,7 @@
 
 // Tự động nạp file .env nếu có (Node.js 20+)
 if (typeof process.loadEnvFile === 'function') {
-  try { process.loadEnvFile(); } catch (_) {}
+  try { process.loadEnvFile(); } catch (_) { }
 }
 
 import crypto from 'crypto';

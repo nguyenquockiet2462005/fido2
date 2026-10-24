@@ -93,6 +93,29 @@ function validateUsername(rawUsername) {
   return { valid: true, username };
 }
 
+/**
+ * So sánh chuỗi an toàn chống tấn công đo lường thời gian (Timing Attack / CWE-208)
+ */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  if (x.length !== y.length) return false;
+  return crypto.timingSafeEqual(x, y);
+}
+
+// Hạn thời gian sống của Challenge WebAuthn (2 phút theo OWASP/NIST)
+const CHALLENGE_TTL_MS = 2 * 60 * 1000;
+function isChallengeExpired(createdAt) {
+  return !createdAt || (Date.now() - createdAt) > CHALLENGE_TTL_MS;
+}
+
+// BẢO MẬT (CWE-532): Tránh log thông tin nhạy cảm (Challenge, Credential) trên production
+const debugLog = (...args) => {
+  if (!isProduction) console.log(...args);
+};
+
+
 
 // ==========================================
 // GIAI ĐOẠN 1: ĐĂNG KÝ (REGISTRATION)
@@ -119,7 +142,15 @@ router.post('/register-options', async (req, res) => {
         error: 'Tài khoản Admin đã được cài đặt Passkey! Vui lòng bấm Đăng nhập.'
       });
     }
-    // Nếu admin chưa có Passkey -> Cho phép khởi tạo Passkey lần đầu (First-time Admin Setup)
+    // BẢO MẬT (C2): Khóa quyền khởi tạo Passkey Admin lần đầu bằng mã cài đặt bí mật (ADMIN_SETUP_TOKEN)
+    const requiredToken = process.env.ADMIN_SETUP_TOKEN;
+    const providedToken = req.body.setupToken || '';
+    if (!requiredToken || !safeEqual(providedToken, requiredToken)) {
+      return res.status(403).json({
+        error: 'Cần mã cài đặt Admin hợp lệ (ADMIN_SETUP_TOKEN) để khởi tạo tài khoản Quản trị viên!'
+      });
+    }
+    req.session.adminSetupOk = true;
   } else {
     // Với các tài khoản bảo lưu khác
     const OTHER_RESERVED = ['administrator', 'root', 'system'];
@@ -164,12 +195,10 @@ router.post('/register-options', async (req, res) => {
     req.session.registeringUserId = userId;
     req.session.registeringUsername = username;
 
-    // In ra Terminal để nhóm dễ theo dõi quá trình
-    console.log('==========================================');
-    console.log('[ĐĂNG KÝ] Tạo Challenge thành công');
-    console.log('[ĐĂNG KÝ] Username:', username);
-    console.log('[ĐĂNG KÝ] Challenge:', options.challenge);
-    console.log('==========================================');
+    debugLog('==========================================');
+    debugLog('[ĐĂNG KÝ] Tạo Challenge thành công');
+    debugLog('[ĐĂNG KÝ] Username:', username);
+    debugLog('==========================================');
 
     // Phát đề thi (chuỗi JSON) về cho trình duyệt
     res.json(options);
@@ -204,11 +233,10 @@ router.post('/register-verify', async (req, res) => {
     });
   }
 
-  console.log('==========================================');
-  console.log('[ĐĂNG KÝ] Bắt đầu xác thực');
-  console.log('[ĐĂNG KÝ] Username:', username);
-  console.log('[ĐĂNG KÝ] Credential ID:', response.id);
-  console.log('==========================================');
+  debugLog('==========================================');
+  debugLog('[ĐĂNG KÝ] Bắt đầu xác thực');
+  debugLog('[ĐĂNG KÝ] Username:', username);
+  debugLog('==========================================');
 
   // Kiểm tra tên gửi lên phải khớp với tên trong phiên đăng ký ban đầu
   if (!req.session.registeringUsername || req.session.registeringUsername.toLowerCase() !== username.toLowerCase()) {
@@ -228,8 +256,19 @@ router.post('/register-verify', async (req, res) => {
     });
   }
 
+  // BẢO MẬT (M1): Kiểm tra thời hạn Challenge đăng ký (2 phút)
+  if (isChallengeExpired(req.session.challengeCreatedAt)) {
+    req.session.currentChallenge = null;
+    req.session.adminSetupOk = false;
+    return res.status(400).json({
+      verified: false,
+      error: 'Phiên đăng ký đã quá hạn (2 phút). Vui lòng thực hiện lại!'
+    });
+  }
+
   // Hủy Challenge ngay lập tức để chống tấn công phát lại (Replay Attack)
   req.session.currentChallenge = null;
+  req.session.challengeCreatedAt = null;
   const registeringUserId = req.session.registeringUserId;
   req.session.registeringUserId = null;
   req.session.registeringUsername = null;
@@ -244,7 +283,7 @@ router.post('/register-verify', async (req, res) => {
       requireUserVerification: true,
     });
 
-    console.log('[ĐĂNG KÝ] Kết quả xác thực:', verification.verified);
+    debugLog('[ĐĂNG KÝ] Kết quả xác thực:', verification.verified);
 
     if (!verification.verified) {
       return res.status(400).json({
@@ -261,6 +300,17 @@ router.post('/register-verify', async (req, res) => {
         verified: false,
         error: 'Không lấy được thông tin Passkey từ thiết bị!'
       });
+    }
+
+    // BẢO MẬT (C2): Khóa quyền khởi tạo Admin nếu chưa qua bước xác thực token hợp lệ
+    if (username.toLowerCase() === 'admin') {
+      if (!req.session.adminSetupOk) {
+        return res.status(403).json({
+          verified: false,
+          error: 'Chưa được cấp quyền cài đặt tài khoản Quản trị viên!'
+        });
+      }
+      req.session.adminSetupOk = false;
     }
 
     // Chỉ tạo người dùng chính thức vào DB khi đã quét vân tay thành công!
@@ -388,11 +438,10 @@ router.post('/login-options', async (req, res) => {
     req.session.challengeCreatedAt = Date.now();
     req.session.loginUsername = user ? user.username : null;
 
-    console.log('==========================================');
-    console.log(`[ĐĂNG NHẬP${isUsernameless ? ' NHANH 1-CHẠM' : ''}] Tạo Challenge thành công`);
-    if (user) console.log('[ĐĂNG NHẬP] Username:', user.username);
-    console.log('[ĐĂNG NHẬP] Challenge:', options.challenge);
-    console.log('==========================================');
+    debugLog('==========================================');
+    debugLog(`[ĐĂNG NHẬP${isUsernameless ? ' NHANH 1-CHẠM' : ''}] Tạo Challenge thành công`);
+    if (user) debugLog('[ĐĂNG NHẬP] Username:', user.username);
+    debugLog('==========================================');
 
     res.json(options);
 
@@ -444,11 +493,10 @@ router.post('/login-verify', async (req, res) => {
     });
   }
 
-  console.log('==========================================');
-  console.log(`[ĐĂNG NHẬP${isUsernameless ? ' NHANH 1-CHẠM' : ''}] Bắt đầu xác thực`);
-  console.log('[ĐĂNG NHẬP] Username:', user.username);
-  console.log('[ĐĂNG NHẬP] Credential ID:', response.id);
-  console.log('==========================================');
+  debugLog('==========================================');
+  debugLog(`[ĐĂNG NHẬP${isUsernameless ? ' NHANH 1-CHẠM' : ''}] Bắt đầu xác thực`);
+  debugLog('[ĐĂNG NHẬP] Username:', user.username);
+  debugLog('==========================================');
 
   const expectedChallenge = req.session.currentChallenge;
 
@@ -459,8 +507,19 @@ router.post('/login-verify', async (req, res) => {
     });
   }
 
+  // BẢO MẬT (M1): Kiểm tra thời hạn Challenge đăng nhập (2 phút)
+  if (isChallengeExpired(req.session.challengeCreatedAt)) {
+    req.session.currentChallenge = null;
+    req.session.challengeCreatedAt = null;
+    return res.status(400).json({
+      verified: false,
+      error: 'Phiên đăng nhập đã quá hạn (2 phút). Vui lòng thử lại!'
+    });
+  }
+
   // Hủy Challenge ngay lập tức để chống Replay Attack
   req.session.currentChallenge = null;
+  req.session.challengeCreatedAt = null;
 
   const userCredentials = user.credentials || [];
 

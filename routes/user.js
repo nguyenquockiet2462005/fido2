@@ -11,9 +11,7 @@ import {
 import {
     findUserByUsername,
     updateCredentialCounter,
-    updateUserProfile,
-    claimStudentIdentity,
-    unlinkStudentCard
+    updateUserProfile
 } from '../db.js';
 
 const router = express.Router();
@@ -22,6 +20,12 @@ const rpID = (process.env.RP_ID || 'localhost').trim();
 const origin = (process.env.ORIGIN || 'http://localhost:3000').trim().replace(/\/+$/, '');
 
 const isProduction = process.env.NODE_ENV === 'production';
+
+// BẢO MẬT (CWE-532): Tránh log thông tin nhạy cảm trên production
+const debugLog = (...args) => {
+    if (!isProduction) console.log(...args);
+};
+
 
 // BẢO MẬT WEBAUTHN (W3C WebAuthn §13.4.1 & OWASP ASVS):
 // TRÊN PRODUCTION: CHỈ chấp nhận DUY NHẤT một Origin và một RP ID chính thức để chống Phishing và Relay Attack.
@@ -98,55 +102,8 @@ router.get('/me', (req, res) => {
     });
 });
 
-// 2. API Quét thẻ sinh viên vật lý (Physical Proof Claim)
-// Endpoint: PUT /api/user/profile/verify-card
-router.put('/profile/verify-card', (req, res) => {
-    if (!req.session.loggedIn || !req.session.username) {
-        return res.status(401).json({
-            error: 'Vui lòng đăng nhập trước khi xác thực thẻ!'
-        });
-    }
-
-    const { studentId, fullName, dob, academicYear, faculty } = req.body;
-
-    if (!studentId || typeof studentId !== 'string' && typeof studentId !== 'number') {
-        return res.status(400).json({
-            error: 'Không tìm thấy Mã số sinh viên (MSSV) hợp lệ từ thẻ!'
-        });
-    }
-
-    const cleanMssv = String(studentId).trim();
-    if (cleanMssv.length < 6 || cleanMssv.length > 20 || !/^[0-9a-zA-Z]+$/.test(cleanMssv)) {
-        return res.status(400).json({
-            error: 'Mã số sinh viên (MSSV) không đúng định dạng hợp lệ!'
-        });
-    }
-
-    try {
-        const result = claimStudentIdentity(req.session.username, {
-            studentId: cleanMssv,
-            fullName: sanitizeText(fullName, 80),
-            dob: sanitizeText(dob, 20),
-            academicYear: sanitizeText(academicYear, 30),
-            faculty: sanitizeText(faculty, 80)
-        });
-
-        return res.json({
-            success: true,
-            message: 'Xác thực thẻ sinh viên HUTECH thành công!',
-            profile: result.profile,
-            revokedFakeAccount: result.revokedFakeAccount
-        });
-    } catch (error) {
-        return res.status(400).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
 // ==========================================
-// 3. API XÁC THỰC NÂNG CAO (STEP-UP AUTHENTICATION)
+// 2. API XÁC THỰC NÂNG CAO (STEP-UP AUTHENTICATION)
 // Cập nhật thông tin sinh viên nhạy cảm bằng sinh trắc học FIDO2
 // ==========================================
 
@@ -175,7 +132,7 @@ router.post('/profile/step-up-options', async (req, res) => {
                 type: 'public-key',
                 transports: dev.transports || [],
             })),
-            userVerification: 'preferred',
+            userVerification: 'required',
         });
 
         // Ghi nhớ Challenge cho thao tác Step-Up cập nhật hồ sơ
@@ -260,7 +217,7 @@ router.post('/profile/step-up-update', async (req, res) => {
                 counter: currentDevice.counter,
                 transports: currentDevice.transports || [],
             },
-            requireUserVerification: false,
+            requireUserVerification: true,
         });
 
         if (!verification.verified) {
@@ -279,10 +236,10 @@ router.post('/profile/step-up-update', async (req, res) => {
             );
         }
 
-        // Lọc sạch dữ liệu đầu vào (Anti XSS)
+        // BẢO MẬT (H3 & Anti XSS): Lọc sạch dữ liệu đầu vào.
+        // KHÔNG cho phép sửa studentId qua Step-up để chống giả mạo MSSV.
         const sanitized = {
             fullName: sanitizeText(profileData.fullName, 100),
-            studentId: sanitizeText(profileData.studentId, 20),
             dob: sanitizeText(profileData.dob, 20),
             faculty: sanitizeText(profileData.faculty, 100),
             academicYear: sanitizeText(profileData.academicYear, 50),
@@ -290,10 +247,9 @@ router.post('/profile/step-up-update', async (req, res) => {
 
         const updatedProfile = updateUserProfile(user.username, sanitized);
 
-        console.log('==========================================');
-        console.log('[STEP-UP AUTH] Xác thực thành công cho user:', user.username);
-        console.log('[STEP-UP AUTH] Đã cập nhật hồ sơ mới:', sanitized);
-        console.log('==========================================');
+        debugLog('==========================================');
+        debugLog('[STEP-UP AUTH] Xác thực thành công cho user:', user.username);
+        debugLog('==========================================');
 
         return res.json({
             success: true,
@@ -310,137 +266,5 @@ router.post('/profile/step-up-update', async (req, res) => {
     }
 });
 
-// 4. API Tạo Challenge để Hủy liên kết thẻ (Legacy Step-Up)
-// Endpoint: POST /api/user/profile/unlink-card-options
-router.post('/profile/unlink-card-options', async (req, res) => {
-    if (!req.session.loggedIn || !req.session.username) {
-        return res.status(401).json({
-            error: 'Vui lòng đăng nhập trước khi thực hiện thao tác này!'
-        });
-    }
-
-    const username = req.session.username;
-    const user = findUserByUsername(username);
-
-    if (!user || !user.credentials || user.credentials.length === 0) {
-        return res.status(400).json({
-            error: 'Tài khoản chưa có Passkey sinh trắc học để xác thực!'
-        });
-    }
-
-    try {
-        const options = await generateAuthenticationOptions({
-            rpID,
-            allowCredentials: user.credentials.map(dev => ({
-                id: dev.id,
-                type: 'public-key',
-                transports: dev.transports || [],
-            })),
-            userVerification: 'preferred',
-        });
-
-        req.session.unlinkChallenge = options.challenge;
-        req.session.unlinkChallengeTime = Date.now();
-        return res.json(options);
-    } catch (error) {
-        return res.status(500).json({
-            error: 'Lỗi hệ thống khi khởi tạo xác thực hủy thẻ.'
-        });
-    }
-});
-
-// 4. API Xác thực sinh trắc học & Hủy liên kết thẻ (Step-Up Auth Verify)
-// Endpoint: POST /api/user/profile/unlink-card-verify
-router.post('/profile/unlink-card-verify', async (req, res) => {
-    if (!req.session.loggedIn || !req.session.username) {
-        return res.status(401).json({
-            error: 'Vui lòng đăng nhập trước khi thực hiện thao tác này!'
-        });
-    }
-
-    const { response } = req.body;
-    if (!response || typeof response !== 'object' || !response.id) {
-        return res.status(400).json({
-            success: false,
-            error: 'Dữ liệu xác thực sinh trắc học không hợp lệ hoặc bị thiếu!'
-        });
-    }
-
-    const username = req.session.username;
-    const user = findUserByUsername(username);
-
-    if (!user) {
-        return res.status(404).json({ error: 'Không tìm thấy tài khoản!' });
-    }
-
-    const expectedChallenge = req.session.unlinkChallenge;
-    if (!expectedChallenge) {
-        return res.status(400).json({
-            error: 'Phiên xác thực đã hết hạn hoặc không hợp lệ. Vui lòng thử lại!'
-        });
-    }
-
-    // Hủy Challenge ngay lập tức để chống Replay Attack
-    req.session.unlinkChallenge = null;
-
-    const userCredentials = user.credentials || [];
-    const currentDevice = userCredentials.find(dev => dev.id === response.id);
-
-    if (!currentDevice) {
-        return res.status(400).json({
-            error: 'Khóa bảo mật không khớp với thiết bị đã đăng ký!'
-        });
-    }
-
-    try {
-        const verification = await verifyAuthenticationResponse({
-            response,
-            expectedChallenge,
-            expectedOrigin: expectedOrigins,
-            expectedRPID: expectedRPIDs,
-            credential: {
-                id: currentDevice.id,
-                publicKey: currentDevice.publicKey,
-                counter: currentDevice.counter,
-                transports: currentDevice.transports || [],
-            },
-        });
-
-        if (!verification.verified) {
-            return res.status(400).json({
-                success: false,
-                error: 'Xác thực sinh trắc học không thành công!'
-            });
-        }
-
-        updateCredentialCounter(
-            user.username,
-            currentDevice.id,
-            verification.authenticationInfo.newCounter
-        );
-
-        const updatedProfile = unlinkStudentCard(user.username);
-
-        return res.json({
-            success: true,
-            message: 'Xác thực thành công! Đã hủy liên kết thẻ sinh viên.',
-            profile: updatedProfile
-        });
-    } catch (error) {
-        return res.status(400).json({
-            success: false,
-            error: error.message || 'Xác thực hủy thẻ thất bại.'
-        });
-    }
-});
-
-// Chặn phương thức DELETE nếu không qua xác thực
-// Endpoint: DELETE /api/user/profile/unlink-card
-router.delete('/profile/unlink-card', (req, res) => {
-    return res.status(403).json({
-        success: false,
-        error: 'Hành động nhạy cảm: Yêu cầu xác thực sinh trắc học (Passkey) để hủy liên kết thẻ!'
-    });
-});
-
 export default router;
+

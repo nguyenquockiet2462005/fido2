@@ -195,6 +195,11 @@ git commit -m "feat: mo ta ngan gon"
 
 # 4. Đẩy nhánh
 git push origin feature/<ten-chuc-nang>
+
+# 5. xoá db
+npm run reset-db
+npm run reset-db -- --yes
+
 ```
 
 Sau đó mở Pull Request trên GitHub vào `main`. Nhóm trưởng review, hỏi lại người viết về đoạn code chính, rồi mới Merge.
