@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "reset-db": "node reset-db.js",
-    "test-issue5": "node test-issue5.js"
+    "reset-db": "node reset-db.js"
   },
   "keywords": [],
   "author": "",

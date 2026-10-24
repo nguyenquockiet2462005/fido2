@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import crypto from 'crypto';
 
 // Lôi các chuyên gia FIDO2 từ thư viện ra
 import {
@@ -27,22 +28,50 @@ const router = express.Router();
 
 // Cấu hình định danh cho máy chủ
 const rpName = 'FIDO2 Demo';
-const rpID = process.env.RP_ID || 'localhost';
-const origin = process.env.ORIGIN || 'http://localhost:3000';
+const rpID = (process.env.RP_ID || 'localhost').trim();
+const origin = (process.env.ORIGIN || 'http://localhost:3000').trim().replace(/\/+$/, '');
 
-// Hỗ trợ cả localhost và 127.0.0.1 để tránh lỗi mismatch Origin khi test cục bộ
-const expectedOrigins = Array.from(new Set([
-  origin,
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'https://localhost:3000'
-]));
+const isProduction = process.env.NODE_ENV === 'production';
 
-const expectedRPIDs = Array.from(new Set([
-  rpID,
-  'localhost',
-  '127.0.0.1'
-]));
+// BẢO MẬT WEBAUTHN (W3C WebAuthn §13.4.1 & OWASP ASVS):
+// TRÊN PRODUCTION: CHỈ chấp nhận DUY NHẤT một Origin và một RP ID chính thức để chống Phishing và Relay Attack.
+// TRÊN DEVELOPMENT: Cho phép linh hoạt localhost và 127.0.0.1 để tiện kiểm thử cục bộ.
+const expectedOrigins = isProduction
+  ? [origin]
+  : Array.from(new Set([
+      origin,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://localhost:3000'
+    ]));
+
+const expectedRPIDs = isProduction
+  ? [rpID]
+  : Array.from(new Set([
+      rpID,
+      'localhost',
+      '127.0.0.1'
+    ]));
+
+/**
+ * Chuyển đổi userId sang Uint8Array/Buffer phù hợp với chuẩn W3C WebAuthn spec §5.4.3:
+ * User handle là chuỗi byte mờ đục (opaque byte sequence) tối đa 64 bytes.
+ */
+function toUserIdUint8Array(idStr) {
+  if (!idStr) {
+    return crypto.randomBytes(64);
+  }
+  if (typeof idStr === 'string') {
+    // Nếu là chuỗi base64url đại diện cho 64 random bytes (86 ký tự base64url)
+    if (/^[a-zA-Z0-9_-]{86}$/.test(idStr)) {
+      return Buffer.from(idStr, 'base64url');
+    }
+    // Tương thích ngược với các ID dạng chuỗi cũ (admin_seed_...)
+    const encoded = new TextEncoder().encode(idStr);
+    return encoded.length <= 64 ? encoded : encoded.slice(0, 64);
+  }
+  return idStr;
+}
 
 /**
  * Hàm xác thực tính hợp lệ của Username
@@ -107,14 +136,19 @@ router.post('/register-options', async (req, res) => {
     }
   }
 
-  // Lấy ID người dùng (nếu là admin đã seed sẵn) hoặc tạo ID tạm thời trong RAM cho người dùng mới
-  const userId = (isSystemAdmin && existingUser) ? existingUser.id : `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // BẢO MẬT (W3C WebAuthn §5.4.3 & OWASP):
+  // Khuyến nghị sử dụng 64 byte ngẫu nhiên mật mã (CSPRNG via crypto.randomBytes)
+  // Tuyệt đối không chứa PII (username) hay timestamp dễ đoán (Date.now() + Math.random())
+  const userId = (isSystemAdmin && existingUser)
+    ? existingUser.id
+    : crypto.randomBytes(64).toString('base64url');
+
   try {
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
-      // Chuyển chuỗi văn bản sang Uint8Array theo đúng chuẩn SimpleWebAuthn v14
-      userID: new TextEncoder().encode(userId),
+      // Chuyển userID sang Buffer/Uint8Array 64 bytes chuẩn W3C
+      userID: toUserIdUint8Array(userId),
       userName: username,
       attestationType: 'none',
       excludeCredentials: [],

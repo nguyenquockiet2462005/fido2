@@ -18,21 +18,30 @@ import {
 
 const router = express.Router();
 
-const rpID = process.env.RP_ID || 'localhost';
-const origin = process.env.ORIGIN || 'http://localhost:3000';
+const rpID = (process.env.RP_ID || 'localhost').trim();
+const origin = (process.env.ORIGIN || 'http://localhost:3000').trim().replace(/\/+$/, '');
 
-const expectedOrigins = Array.from(new Set([
-    origin,
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://localhost:3000'
-]));
+const isProduction = process.env.NODE_ENV === 'production';
 
-const expectedRPIDs = Array.from(new Set([
-    rpID,
-    'localhost',
-    '127.0.0.1'
-]));
+// BẢO MẬT WEBAUTHN (W3C WebAuthn §13.4.1 & OWASP ASVS):
+// TRÊN PRODUCTION: CHỈ chấp nhận DUY NHẤT một Origin và một RP ID chính thức để chống Phishing và Relay Attack.
+// TRÊN DEVELOPMENT: Cho phép linh hoạt localhost và 127.0.0.1 để tiện kiểm thử cục bộ.
+const expectedOrigins = isProduction
+    ? [origin]
+    : Array.from(new Set([
+        origin,
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://localhost:3000'
+    ]));
+
+const expectedRPIDs = isProduction
+    ? [rpID]
+    : Array.from(new Set([
+        rpID,
+        'localhost',
+        '127.0.0.1'
+    ]));
 
 // Helper lọc sạch ký tự nguy hiểm / HTML Injection trong chuỗi
 function sanitizeText(str, maxLen = 100) {

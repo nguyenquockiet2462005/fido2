@@ -32,6 +32,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -100,7 +101,7 @@ function saveUsersToFileLocal() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    const tempFile = path.join(DATA_DIR, `users_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.tmp`);
+    const tempFile = path.join(DATA_DIR, `users_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.tmp`);
     fs.writeFileSync(tempFile, JSON.stringify(users, null, 2), 'utf-8');
     fs.renameSync(tempFile, DATA_FILE);
   } catch (error) {
@@ -242,7 +243,8 @@ export function seedAdminUser() {
   const existingAdmin = users.find(u => u.username.toLowerCase() === ADMIN_USERNAME.toLowerCase());
   if (!existingAdmin) {
     const adminUser = {
-      id: `admin_seed_${Date.now()}`,
+      // BẢO MẬT (W3C WebAuthn §5.4.3): 64 random bytes từ CSPRNG (crypto.randomBytes)
+      id: crypto.randomBytes(64).toString('base64url'),
       username: ADMIN_USERNAME,
       role: 'admin',
       profile: {
@@ -312,7 +314,9 @@ export function findUserByCredentialId(credentialId) {
 export function createUser(username, customId = null) {
   const cleanUsername = String(username).trim();
   const newUser = {
-    id: customId || `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    // BẢO MẬT (W3C WebAuthn §5.4.3 & OWASP): 64 byte ngẫu nhiên mật mã (CSPRNG via crypto.randomBytes)
+    // Không chứa thông tin định danh cá nhân (PII) như username hay timestamp
+    id: customId || crypto.randomBytes(64).toString('base64url'),
     username: cleanUsername,
     // BẢO MẬT: Mọi tài khoản đăng ký qua form công khai LUÔN LUÔN là student
     role: 'student',
@@ -335,7 +339,7 @@ export function createUser(username, customId = null) {
 }
 
 // Giải thích từng chi tiết:
-// id: user_...: Chuẩn FIDO2 quy định mỗi người dùng phải có một userID duy nhất. Chúng ta dùng thời gian hiện tại (Date.now()) kết hợp chuỗi ngẫu nhiên để đảm bảo không bao giờ có 2 người bị trùng ID.
+// id: Chuẩn W3C WebAuthn (§5.4.3) quy định user handle (userID) là chuỗi byte mờ đục (opaque) tối đa 64 bytes, khuyến nghị dùng 64 random bytes từ bộ sinh số ngẫu nhiên an toàn mật mã (CSPRNG). Tuyệt đối không chứa thông tin định danh cá nhân (PII) hay timestamp dễ đoán.
 // credentials: []: Đây là điểm đặc biệt nhất của Passkey! Tài khoản vừa tạo sẽ không có trường password, chỉ có một mảng rỗng sẵn sàng để đón chìa khóa sau khi người dùng quét vân tay.
 // users.push(newUser): Giống như hành động INSERT INTO users trong cơ sở dữ liệu, lưu tài khoản vào bộ nhớ RAM.
 //
