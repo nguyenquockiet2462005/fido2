@@ -48,43 +48,26 @@ const DATA_FILE = path.join(DATA_DIR, 'users.json');
 let users = [];
 
 /**
- * CHUẨN HÓA KHÓA CÔNG KHAI (FIDO2 Public Key):
- * Đảm bảo luôn trả về đúng kiểu `Uint8Array` (77 bytes cho ES256 / COSE Key).
- * Phòng chống triệt để lỗi `decodedPublicKey.get is not a function` khi đọc từ MongoDB Binary hoặc JSON file.
+ * Chuyển đổi Khóa công khai sang chuỗi Base64URL trước khi lưu trữ
+ * Đảm bảo mỗi khóa chỉ chiếm 1 dòng duy nhất trong CSDL (giảm 74% dung lượng)
+ */
+export function toBase64UrlKey(pk) {
+  if (typeof pk === 'string') return pk;
+  if (pk instanceof Uint8Array || Buffer.isBuffer(pk)) {
+    return Buffer.from(pk).toString('base64url');
+  }
+  return pk;
+}
+
+/**
+ * Chuẩn hóa Khóa công khai thành Uint8Array khi đọc ra từ CSDL
+ * Phục vụ trực tiếp cho thư viện @simplewebauthn/server xác thực chữ ký
  */
 export function normalizePublicKey(pk) {
-  if (!pk) return pk;
-
-  // 1. Đã là Uint8Array hoặc Buffer
-  if (pk instanceof Uint8Array || Buffer.isBuffer(pk)) {
-    return new Uint8Array(pk);
-  }
-
-  // 2. Đối tượng BSON Binary từ MongoDB Atlas
-  if (pk._bsontype === 'Binary' || (pk.buffer && (pk.buffer instanceof Uint8Array || Buffer.isBuffer(pk.buffer) || pk.buffer instanceof ArrayBuffer))) {
-    return new Uint8Array(pk.buffer);
-  }
-  if (typeof pk.value === 'function') {
-    const val = pk.value(true);
-    if (val) return new Uint8Array(val);
-  }
-
-  // 3. Chuỗi Base64
+  if (pk instanceof Uint8Array) return pk;
   if (typeof pk === 'string') {
-    return new Uint8Array(Buffer.from(pk, 'base64'));
+    return new Uint8Array(Buffer.from(pk, 'base64url'));
   }
-
-  // 4. Mảng thông thường
-  if (Array.isArray(pk)) {
-    return new Uint8Array(pk);
-  }
-
-  // 5. Object được JSON.parse từ Uint8Array: { "0": 165, "1": 1, ... }
-  if (typeof pk === 'object') {
-    const values = Object.values(pk);
-    return new Uint8Array(values);
-  }
-
   return pk;
 }
 
@@ -101,8 +84,16 @@ function saveUsersToFileLocal() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
+    // 🛡️ Đảm bảo publicKey luôn là chuỗi Base64URL 1 dòng duy nhất khi lưu vào JSON
+    const sanitizedUsers = users.map(u => ({
+      ...u,
+      credentials: (u.credentials || []).map(c => ({
+        ...c,
+        publicKey: toBase64UrlKey(c.publicKey)
+      }))
+    }));
     const tempFile = path.join(DATA_DIR, `users_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.tmp`);
-    fs.writeFileSync(tempFile, JSON.stringify(users, null, 2), 'utf-8');
+    fs.writeFileSync(tempFile, JSON.stringify(sanitizedUsers, null, 2), 'utf-8');
     fs.renameSync(tempFile, DATA_FILE);
   } catch (error) {
     console.error('⚠️ [DB-LOCAL] Lỗi khi lưu dữ liệu ra file:', error.message);
@@ -126,7 +117,7 @@ async function syncUsersToCloud() {
             ...u,
             credentials: (u.credentials || []).map(c => ({
               ...c,
-              publicKey: normalizePublicKey(c.publicKey)
+              publicKey: toBase64UrlKey(c.publicKey)
             }))
           },
           upsert: true
@@ -362,7 +353,7 @@ export function addCredentialToUser(username, credentialInfo) {
   }
   user.credentials.push({
     ...credentialInfo,
-    publicKey: normalizePublicKey(credentialInfo.publicKey)
+    publicKey: toBase64UrlKey(credentialInfo.publicKey)
   }); //nhét chìa khoá mới vào mảng creadentials của người đó
   saveUsersToFile(); // Tự động lưu
   return user;
