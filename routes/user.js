@@ -16,36 +16,54 @@ import {
 
 const router = express.Router();
 
-const rpID = (process.env.RP_ID || 'localhost').trim();
-const origin = (process.env.ORIGIN || 'http://localhost:3000').trim().replace(/\/+$/, '');
-
 const isProduction = process.env.NODE_ENV === 'production';
+const rpID = (process.env.RP_ID || 'localhost').trim();
 
 // BẢO MẬT (CWE-532): Tránh log thông tin nhạy cảm trên production
 const debugLog = (...args) => {
     if (!isProduction) console.log(...args);
 };
 
-
 // BẢO MẬT WEBAUTHN (W3C WebAuthn §13.4.1 & OWASP ASVS):
 // TRÊN PRODUCTION: CHỈ chấp nhận DUY NHẤT một Origin và một RP ID chính thức để chống Phishing và Relay Attack.
-// TRÊN DEVELOPMENT: Cho phép linh hoạt localhost và 127.0.0.1 để tiện kiểm thử cục bộ.
-const expectedOrigins = isProduction
-    ? [origin]
-    : Array.from(new Set([
-        origin,
+// TRÊN DEVELOPMENT: Tự động chấp nhận linh hoạt các cổng localhost/127.0.0.1 để tiện kiểm thử cục bộ.
+export function getExpectedOrigins(req) {
+    const prod = process.env.NODE_ENV === 'production';
+    const configuredOrigin = (process.env.ORIGIN || '').trim().replace(/\/+$/, '');
+    if (prod && configuredOrigin) {
+        return [configuredOrigin];
+    }
+
+    const currentPort = process.env.PORT || 3000;
+    const origins = new Set([
+        configuredOrigin,
+        `http://localhost:${currentPort}`,
+        `http://127.0.0.1:${currentPort}`,
+        `https://localhost:${currentPort}`,
         'http://localhost:3000',
         'http://127.0.0.1:3000',
-        'https://localhost:3000'
-    ]));
+        'http://localhost:3001',
+        'http://127.0.0.1:3001',
+        'https://localhost:3000',
+        'https://localhost:3001'
+    ]);
 
-const expectedRPIDs = isProduction
-    ? [rpID]
-    : Array.from(new Set([
-        rpID,
-        'localhost',
-        '127.0.0.1'
-    ]));
+    if (req && typeof req.get === 'function') {
+        const reqOrigin = req.get('origin');
+        if (reqOrigin && (reqOrigin.startsWith('http://localhost:') || reqOrigin.startsWith('http://127.0.0.1:'))) {
+            origins.add(reqOrigin);
+        }
+    }
+
+    return Array.from(origins).filter(Boolean);
+}
+
+export function getExpectedRPIDs() {
+    const prod = process.env.NODE_ENV === 'production';
+    const rp = (process.env.RP_ID || 'localhost').trim();
+    if (prod) return [rp];
+    return Array.from(new Set([rp, 'localhost', '127.0.0.1']));
+}
 
 // Helper lọc sạch ký tự nguy hiểm / HTML Injection trong chuỗi
 function sanitizeText(str, maxLen = 100) {
@@ -209,8 +227,8 @@ router.post('/profile/step-up-update', async (req, res) => {
         const verification = await verifyAuthenticationResponse({
             response,
             expectedChallenge,
-            expectedOrigin: expectedOrigins,
-            expectedRPID: expectedRPIDs,
+            expectedOrigin: getExpectedOrigins(req),
+            expectedRPID: getExpectedRPIDs(),
             credential: {
                 id: currentDevice.id,
                 publicKey: currentDevice.publicKey,

@@ -234,12 +234,15 @@
 
                 <div class="form-group">
                     <label class="form-label">Mã Số Sinh Viên (MSSV)</label>
-                    <input type="text" id="edit-mssv" class="form-input" placeholder="218060xxxx" autocomplete="off" />
+                    <input type="text" id="edit-mssv" class="form-input" readonly
+                        placeholder="Chưa có MSSV" autocomplete="off" />
+                    <span class="form-hint">🔒 MSSV do nhà trường quản lý cố định, không thể chỉnh sửa.</span>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Ngày Sinh</label>
-                    <input type="text" id="edit-dob" class="form-input" placeholder="dd/mm/yyyy" autocomplete="off" />
+                    <input type="date" id="edit-dob" class="form-input" min="1960-01-01" max="2020-12-31" />
+                    <span class="form-hint">📅 Chọn ngày sinh từ lịch (Hệ thống tự chuẩn hóa ngày/tháng/năm).</span>
                 </div>
 
                 <div class="form-group">
@@ -304,11 +307,46 @@
             }, delay);
         }
 
+        // Tiện ích: Chuyển đổi 'dd/mm/yyyy' hoặc 'yyyy-mm-dd' sang 'yyyy-mm-dd' cho thẻ <input type="date">
+        function toDateInputValue(dobStr) {
+            if (!dobStr || typeof dobStr !== 'string') return '';
+            dobStr = dobStr.trim();
+            if (dobStr.includes('/')) {
+                const parts = dobStr.split('/');
+                if (parts.length === 3) {
+                    const day = parts[0].padStart(2, '0');
+                    const month = parts[1].padStart(2, '0');
+                    const year = parts[2];
+                    return `${year}-${month}-${day}`;
+                }
+            }
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dobStr)) {
+                return dobStr;
+            }
+            return '';
+        }
+
+        // Tiện ích: Chuyển đổi 'yyyy-mm-dd' từ <input type="date"> sang 'dd/mm/yyyy' hiển thị chuẩn VN
+        function fromDateInputValue(ymdStr) {
+            if (!ymdStr || typeof ymdStr !== 'string') return '';
+            ymdStr = ymdStr.trim();
+            if (ymdStr.includes('-')) {
+                const parts = ymdStr.split('-');
+                if (parts.length === 3) {
+                    const year = parts[0];
+                    const month = parts[1].padStart(2, '0');
+                    const day = parts[2].padStart(2, '0');
+                    return `${day}/${month}/${year}`;
+                }
+            }
+            return ymdStr;
+        }
+
         function openModal() {
             if (currentUser) {
                 editFullname.value = currentUser.profile?.fullName || currentUser.hoTen || '';
-                editMssv.value = currentUser.profile?.studentId || '';
-                editDob.value = currentUser.profile?.dob || currentUser.ngaySinh || '';
+                editMssv.value = currentUser.profile?.studentId || '(Chưa cấp)';
+                editDob.value = toDateInputValue(currentUser.profile?.dob || currentUser.ngaySinh || '');
                 editFaculty.value = currentUser.profile?.faculty || '';
                 editYear.value = currentUser.profile?.academicYear || '';
             }
@@ -353,8 +391,8 @@
                 document.getElementById('ws-shortname').innerText = shortName;
                 document.getElementById('ws-username').innerText = u.username;
                 document.getElementById('val-name').innerText = displayName;
-                document.getElementById('val-mssv').innerText = u.profile?.studentId || '(Chưa cập nhật)';
-                document.getElementById('val-dob').innerText = u.ngaySinh || '--/--/----';
+                document.getElementById('val-mssv').innerText = u.profile?.studentId || '(Chưa cấp)';
+                document.getElementById('val-dob').innerText = u.profile?.dob || u.ngaySinh || '--/--/----';
                 document.getElementById('val-creds-count').innerText = `${u.credentialsCount || 0} khóa Passkey`;
 
                 // Avatar
@@ -387,8 +425,7 @@
             btnSaveStepUp.addEventListener('click', async () => {
                 const profileData = {
                     fullName: editFullname.value.trim(),
-                    studentId: editMssv.value.trim(),
-                    dob: editDob.value.trim(),
+                    dob: fromDateInputValue(editDob.value),
                     faculty: editFaculty.value.trim(),
                     academicYear: editYear.value.trim(),
                 };

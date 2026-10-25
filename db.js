@@ -435,6 +435,7 @@ export function updateUserProfile(username, updatedData) {
     faculty: updatedData.faculty !== undefined ? updatedData.faculty : user.profile?.faculty || '',
     academicYear: updatedData.academicYear !== undefined ? updatedData.academicYear : user.profile?.academicYear || '',
     university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+    isVerifiedCard: true,
     updatedAt: new Date().toISOString()
   };
 

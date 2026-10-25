@@ -4,8 +4,8 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node --env-file=.env server.js",
+    "dev": "node --watch --env-file=.env server.js",
     "reset-db": "node --env-file=.env reset-db.js",
     "test": "node --env-file=.env tests/security.test.mjs"
   },
