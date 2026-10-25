@@ -684,3 +684,168 @@ pre#outputLog {
         padding: 24px 20px 30px;
     }
 }
+
+/* =========================================================
+   MODAL DIALOG KHỞI TẠO ADMIN CAO CẤP (CUSTOM MODAL)
+   ========================================================= */
+.admin-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(11, 17, 32, 0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    z-index: 99999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.admin-modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.admin-modal-card {
+    background: #ffffff;
+    width: 100%;
+    max-width: 390px;
+    border-radius: 24px;
+    padding: 32px 26px 26px;
+    text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(56, 189, 248, 0.2);
+    transform: scale(0.92) translateY(12px);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.admin-modal-overlay.active .admin-modal-card {
+    transform: scale(1) translateY(0);
+}
+
+.admin-modal-badge {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 16px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #0056b3 0%, #0284c7 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #ffffff;
+    box-shadow: 0 10px 25px rgba(0, 86, 179, 0.35);
+}
+
+.admin-modal-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+}
+
+.admin-modal-desc {
+    font-size: 0.88rem;
+    color: #64748b;
+    line-height: 1.45;
+    margin-bottom: 22px;
+}
+
+.admin-modal-input-wrap {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.admin-modal-input {
+    width: 100%;
+    padding: 13px 44px 13px 16px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 14px;
+    font-size: 0.95rem;
+    color: #0f172a;
+    background: #f8fafc;
+    outline: none;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.admin-modal-input:focus {
+    border-color: #0056b3;
+    background: #ffffff;
+    box-shadow: 0 0 0 3.5px rgba(0, 86, 179, 0.15);
+}
+
+.admin-modal-input::placeholder {
+    color: #94a3b8;
+    font-size: 0.88rem;
+}
+
+.admin-modal-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease;
+}
+
+.admin-modal-toggle:hover {
+    color: #0f172a;
+}
+
+.admin-modal-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.admin-modal-btn {
+    flex: 1;
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+    border: none;
+}
+
+.admin-modal-btn-cancel {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.admin-modal-btn-cancel:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.admin-modal-btn-confirm {
+    background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 86, 179, 0.3);
+}
+
+.admin-modal-btn-confirm:hover {
+    box-shadow: 0 6px 18px rgba(0, 86, 179, 0.45);
+    transform: translateY(-1px);
+}
+
+.admin-modal-btn-confirm:active {
+    transform: translateY(0);
+}

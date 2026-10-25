@@ -68,7 +68,11 @@ const server = app.listen(0, async () => {
   console.log(`\nTesting HTTP Endpoints on ${baseUrl}...`);
 
   try {
+    const adminUser = db.findUserByUsername('admin');
+    const originalCreds = adminUser ? adminUser.credentials : [];
+
     // 1. When Admin ALREADY has Passkey -> MUST return 400 (locked, cannot register)
+    if (adminUser) adminUser.credentials = [{ id: 'mock-passkey-test' }];
     const resExistingAdmin = await fetch(`${baseUrl}/api/auth/register-options`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -80,9 +84,7 @@ const server = app.listen(0, async () => {
     console.log('✅ Admin with Passkey: correctly locked out from re-registration (HTTP 400)');
 
     // 2. Now simulate first-time setup (when admin has no credentials yet, e.g. after reset-db)
-    const adminUser = db.findUserByUsername('admin');
-    const originalCreds = adminUser.credentials;
-    adminUser.credentials = []; // Simulate clean/reset state
+    if (adminUser) adminUser.credentials = []; // Simulate clean/reset state
 
     try {
       // 2a. Without token -> MUST return 403

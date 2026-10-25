@@ -118,8 +118,14 @@ app.get('/vendor/simplewebauthn-browser.min.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'node_modules/@simplewebauthn/browser/dist/bundle/index.umd.min.js'));
 });
 
-// Phục vụ giao diện tĩnh từ public/
-app.use(express.static(path.join(__dirname, 'public')));
+// Phục vụ giao diện tĩnh từ public/ (tắt cache ở môi trường dev để trình duyệt luôn nhận file JS mới nhất)
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res) => {
+    if (process.env.NODE_ENV !== 'production') {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // ==========================================
 // 6. CÁC ROUTE KIỂM TRA (HEALTH, ADMIN & DEBUG AN TOÀN)

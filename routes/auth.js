@@ -39,19 +39,19 @@ const isProduction = process.env.NODE_ENV === 'production';
 const expectedOrigins = isProduction
   ? [origin]
   : Array.from(new Set([
-      origin,
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://localhost:3000'
-    ]));
+    origin,
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://localhost:3000'
+  ]));
 
 const expectedRPIDs = isProduction
   ? [rpID]
   : Array.from(new Set([
-      rpID,
-      'localhost',
-      '127.0.0.1'
-    ]));
+    rpID,
+    'localhost',
+    '127.0.0.1'
+  ]));
 
 /**
  * Chuyển đổi userId sang Uint8Array/Buffer phù hợp với chuẩn W3C WebAuthn spec §5.4.3:
@@ -145,9 +145,15 @@ router.post('/register-options', async (req, res) => {
     // BẢO MẬT (C2): Khóa quyền khởi tạo Passkey Admin lần đầu bằng mã cài đặt bí mật (ADMIN_SETUP_TOKEN)
     const requiredToken = process.env.ADMIN_SETUP_TOKEN;
     const providedToken = req.body.setupToken || '';
+    if (!providedToken) {
+      return res.status(403).json({
+        needsAdminToken: true,
+        error: 'Cần mã cài đặt Admin hợp lệ (ADMIN_SETUP_TOKEN) để khởi tạo tài khoản Quản trị viên!'
+      });
+    }
     if (!requiredToken || !safeEqual(providedToken, requiredToken)) {
       return res.status(403).json({
-        error: 'Cần mã cài đặt Admin hợp lệ (ADMIN_SETUP_TOKEN) để khởi tạo tài khoản Quản trị viên!'
+        error: 'Mã cài đặt Admin không chính xác!'
       });
     }
     req.session.adminSetupOk = true;

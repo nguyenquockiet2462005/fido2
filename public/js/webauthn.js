@@ -5,9 +5,10 @@
 // ==========================================
 // 1. LUỒNG ĐĂNG KÝ PASSKEY (SIGN UP)
 // ==========================================
-export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
-    // Hỗ trợ linh hoạt dù truyền 2 tham số hay 4 tham số
+export async function handleRegister(username, hoTen, ngaySinh, logCallback, promptTokenCallback) {
+    // Hỗ trợ linh hoạt tham số
     if (typeof hoTen === 'function') {
+        promptTokenCallback = ngaySinh;
         logCallback = hoTen;
         hoTen = '';
         ngaySinh = '';
@@ -21,28 +22,13 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
         return { success: false, error: errorMsg };
     }
 
-    // BẢO MẬT (C2): Khóa quyền khởi tạo Admin lần đầu bằng token bảo mật
-    let setupToken = '';
-    if (username && username.trim().toLowerCase() === 'admin') {
-        const inputToken = window.prompt("🛡️ KHỞI TẠO TÀI KHOẢN ADMIN:\nVui lòng nhập mã bảo vệ cài đặt Admin (ADMIN_SETUP_TOKEN):");
-        if (inputToken === null) {
-            log("❌ Đã hủy thao tác đăng ký Admin.");
-            return { success: false, error: "Đã hủy thao tác cài đặt Admin." };
-        }
-        setupToken = inputToken.trim();
-        if (!setupToken) {
-            log("❌ Chưa nhập mã cài đặt Admin.");
-            return { success: false, error: "Cần mã cài đặt Admin để tiếp tục!" };
-        }
-    }
-
     try {
         log("🟡 Đang gửi yêu cầu xin Challenge từ Server...");
 
-        const optionsRes = await fetch('/api/auth/register-options', {
+        let optionsRes = await fetch('/api/auth/register-options', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, hoTen, ngaySinh, setupToken })
+            body: JSON.stringify({ username, hoTen, ngaySinh })
         });
 
         let optionsJSON;
@@ -51,6 +37,33 @@ export async function handleRegister(username, hoTen, ngaySinh, logCallback) {
         } catch (_) {
             throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
         }
+
+        // BẢO MẬT (C2): Khi Server yêu cầu needsAdminToken (Admin chưa có Passkey, đăng ký lần đầu)
+        // Gọi callback giao diện được truyền từ UI layer (Clean Code / Inversion of Control)
+        if (optionsRes.status === 403 && optionsJSON?.needsAdminToken) {
+            const getSetupToken = typeof promptTokenCallback === 'function'
+                ? promptTokenCallback
+                : () => Promise.resolve(window.prompt("Nhập mã kích hoạt Admin (ADMIN_SETUP_TOKEN):"));
+
+            const setupToken = await getSetupToken();
+            if (!setupToken) {
+                log("❌ Đã hủy thao tác cài đặt Admin.");
+                return { success: false, error: "Đã hủy thao tác cài đặt Admin." };
+            }
+
+            // Gửi lại yêu cầu kèm setupToken
+            optionsRes = await fetch('/api/auth/register-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, hoTen, ngaySinh, setupToken })
+            });
+            try {
+                optionsJSON = await optionsRes.json();
+            } catch (_) {
+                throw new Error(`Lỗi kết nối máy chủ (${optionsRes.status}). Vui lòng thử lại!`);
+            }
+        }
+
         if (!optionsRes.ok || optionsJSON.error) {
             throw new Error(optionsJSON?.error || `Lỗi từ máy chủ (${optionsRes.status})`);
         }

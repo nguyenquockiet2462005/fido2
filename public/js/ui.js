@@ -87,6 +87,80 @@ async function checkCurrentSession() {
 checkCurrentSession();
 
 // ==========================================
+// HÀM ĐIỀU KHIỂN MODAL NHẬP TOKEN ADMIN (UI LAYER)
+// ==========================================
+function promptAdminSetupModal() {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('admin-setup-modal-overlay');
+        const input = document.getElementById('admin-modal-token-input');
+        const btnConfirm = document.getElementById('admin-modal-btn-confirm');
+        const btnCancel = document.getElementById('admin-modal-btn-cancel');
+        const toggleEye = document.getElementById('admin-modal-toggle-eye');
+
+        if (!overlay || !input || !btnConfirm || !btnCancel) {
+            return resolve(window.prompt("Nhập mã kích hoạt Admin (ADMIN_SETUP_TOKEN):"));
+        }
+
+        input.value = '';
+        input.type = 'password';
+        overlay.classList.add('active');
+        setTimeout(() => input.focus(), 150);
+
+        function cleanup() {
+            overlay.classList.remove('active');
+            btnConfirm.removeEventListener('click', onConfirm);
+            btnCancel.removeEventListener('click', onCancel);
+            if (toggleEye) toggleEye.removeEventListener('click', onToggleEye);
+            input.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keydown', onEsc);
+        }
+
+        function onConfirm() {
+            const token = input.value.trim();
+            if (!token) {
+                input.focus();
+                return;
+            }
+            cleanup();
+            resolve(token);
+        }
+
+        function onCancel() {
+            cleanup();
+            resolve(null);
+        }
+
+        function onToggleEye() {
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
+        }
+
+        function onKeyDown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onConfirm();
+            }
+        }
+
+        function onEsc(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onCancel();
+            }
+        }
+
+        btnConfirm.addEventListener('click', onConfirm);
+        btnCancel.addEventListener('click', onCancel);
+        if (toggleEye) toggleEye.addEventListener('click', onToggleEye);
+        input.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keydown', onEsc);
+    });
+}
+
+// ==========================================
 // 2. NÚT ĐĂNG KÝ (REGISTER)
 // ==========================================
 if (btnRegister) {
@@ -100,7 +174,7 @@ if (btnRegister) {
 
         setButtonsLoading(true);
         try {
-            const result = await handleRegister(username, '', '', logToInspector);
+            const result = await handleRegister(username, '', '', logToInspector, promptAdminSetupModal);
             if (result && result.success) {
                 btnRegister.classList.add('btn-success-pop');
                 showInlinePopup('success', 'Đăng ký thành công! Hãy bấm Đăng Nhập.', 3500);
