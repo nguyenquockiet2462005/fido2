@@ -175,6 +175,35 @@ const server = app.listen(0, async () => {
     assert.strictEqual(dataMismatch.verified, false);
     console.log('✅ A11 / M9 Defense: register-verify with mismatched session username rejected (HTTP 400)');
 
+    // 6b. Test: register-verify when username already exists in DB -> MUST return HTTP 400
+    const resOptB = await fetch(`${baseUrl}/api/auth/register-options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'user_already_registered' }),
+    });
+    const cookieB = resOptB.headers.get('set-cookie');
+    assert.strictEqual(resOptB.status, 200);
+
+    // Pre-create the user in DB before verify is processed
+    db.createUser('user_already_registered');
+
+    const resExistingUserVerify = await fetch(`${baseUrl}/api/auth/register-verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieB,
+      },
+      body: JSON.stringify({
+        username: 'user_already_registered',
+        response: { id: 'mock-response-id' },
+      }),
+    });
+    assert.strictEqual(resExistingUserVerify.status, 400);
+    const dataExistingUser = await resExistingUserVerify.json();
+    assert.strictEqual(dataExistingUser.verified, false);
+    assert.ok(dataExistingUser.error.includes('Tài khoản này đã tồn tại'));
+    console.log('✅ A11 Defense (Existing User): register-verify rejected account collision (HTTP 400)');
+
     // 7. Test Step-Up without valid challenge or expired -> MUST return 400 or 401
     const resStepUpExpired = await fetch(`${baseUrl}/api/user/profile/step-up-update`, {
       method: 'POST',

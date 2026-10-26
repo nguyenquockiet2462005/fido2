@@ -244,7 +244,7 @@ router.post('/register-verify', async (req, res) => {
   const bodyUsername = req.body?.username ? String(req.body.username).trim() : '';
 
   // BẢO MẬT (A11 / M9): Không tin tưởng req.body.username, phải khớp tuyệt đối với Session gốc
-  if (!sessionUsername || sessionUsername.toLowerCase() !== bodyUsername.toLowerCase()) {
+  if (!sessionUsername || sessionUsername !== bodyUsername) {
     return res.status(400).json({
       verified: false,
       error: 'Dữ liệu phiên đăng ký không hợp lệ, không khớp hoặc đã hết hạn!'
@@ -253,6 +253,16 @@ router.post('/register-verify', async (req, res) => {
 
   // Sử dụng trực tiếp username từ Session làm Single Source of Truth
   const username = sessionUsername;
+
+  // BẢO MẬT: Chặn ngay nếu tài khoản đã tồn tại (chống gán đè Passkey vào tài khoản có sẵn)
+  const existingUserEarly = findUserByUsername(username);
+  const isInitialAdminEarly = existingUserEarly && existingUserEarly.username.toLowerCase() === 'admin' && existingUserEarly.role === 'admin' && (!existingUserEarly.credentials || existingUserEarly.credentials.length === 0);
+  if (existingUserEarly && !isInitialAdminEarly) {
+    return res.status(400).json({
+      verified: false,
+      error: 'Tài khoản này đã tồn tại. Không thể đăng ký đè Passkey!'
+    });
+  }
   const { response } = req.body;
 
   // Kiểm tra response object hợp lệ

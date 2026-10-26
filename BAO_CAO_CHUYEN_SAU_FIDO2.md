@@ -258,6 +258,8 @@ Testing HTTP Endpoints on dynamic port...
 ✅ Student Registration: normal flow unimpeded (status 200, challenge generated - Sinh viên đăng ký bình thường)
 ✅ C3 Defense: /api/user/profile/verify-card returned 404 (Đã gỡ bỏ an toàn endpoint thẻ cũ)
 ✅ C3 Defense: /api/user/profile/unlink-card-options returned 404 (Đã gỡ bỏ an toàn endpoint thẻ cũ)
+✅ A11 / M9 Defense: register-verify with mismatched session username rejected (HTTP 400)
+✅ Step-Up TTL / Session Defense: unauthorized/expired step-up update rejected
 
 🎉 ALL SECURITY FIXES AND DEFENSES VERIFIED WORKING 100%!
 ```
