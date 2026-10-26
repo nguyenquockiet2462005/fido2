@@ -13,6 +13,7 @@ import {
     updateCredentialCounter,
     updateUserProfile
 } from '../db.js';
+import { isChallengeExpired } from './auth.js';
 
 const router = express.Router();
 
@@ -201,16 +202,10 @@ router.post('/profile/step-up-update', async (req, res) => {
     req.session.stepUpChallenge = null;
     req.session.stepUpChallengeTime = null;
 
-    if (!expectedChallenge) {
+    // BẢO MẬT: Kiểm tra Challenge tồn tại và thời hạn TTL 2 phút bằng hàm chuẩn isChallengeExpired
+    if (!expectedChallenge || isChallengeExpired(challengeTime)) {
         return res.status(400).json({
-            error: 'Phiên xác thực sinh trắc học đã hết hạn hoặc không hợp lệ. Vui lòng thử lại!'
-        });
-    }
-
-    // Giới hạn thời gian xác thực trong 2 phút
-    if (challengeTime && Date.now() - challengeTime > 2 * 60 * 1000) {
-        return res.status(400).json({
-            error: 'Phiên xác thực sinh trắc học đã quá hạn (2 phút). Vui lòng quét lại!'
+            error: 'Phiên xác thực sinh trắc học đã quá hạn (2 phút) hoặc không hợp lệ. Vui lòng thử lại!'
         });
     }
 

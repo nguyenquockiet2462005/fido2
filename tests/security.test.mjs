@@ -149,6 +149,44 @@ const server = app.listen(0, async () => {
     assert.strictEqual(resUnlinkOptions.status, 404, 'unlink-card-options route must be 404 (removed)');
     console.log('✅ C3 Defense: /api/user/profile/unlink-card-options returned 404 (successfully removed)');
 
+    // 6. Test A11 / M9: Send register-verify with mismatched username -> MUST return HTTP 400
+    const resOptA = await fetch(`${baseUrl}/api/auth/register-options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'user_legit_a' }),
+    });
+    const cookieA = resOptA.headers.get('set-cookie');
+    assert.strictEqual(resOptA.status, 200);
+
+    // Attacker tries to verify under user B (e.g. admin) with user A's session cookie
+    const resMismatchedVerify = await fetch(`${baseUrl}/api/auth/register-verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieA,
+      },
+      body: JSON.stringify({
+        username: 'admin', // Mismatched username
+        response: { id: 'mock-response-id' },
+      }),
+    });
+    assert.strictEqual(resMismatchedVerify.status, 400);
+    const dataMismatch = await resMismatchedVerify.json();
+    assert.strictEqual(dataMismatch.verified, false);
+    console.log('✅ A11 / M9 Defense: register-verify with mismatched session username rejected (HTTP 400)');
+
+    // 7. Test Step-Up without valid challenge or expired -> MUST return 400 or 401
+    const resStepUpExpired = await fetch(`${baseUrl}/api/user/profile/step-up-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        response: { id: 'mock-cred' },
+        profileData: { fullName: 'Test' },
+      }),
+    });
+    assert.ok(resStepUpExpired.status === 400 || resStepUpExpired.status === 401);
+    console.log('✅ Step-Up TTL / Session Defense: unauthorized/expired step-up update rejected');
+
     console.log('\n🎉 ALL SECURITY FIXES AND DEFENSES VERIFIED WORKING 100%!');
   } finally {
     server.close();

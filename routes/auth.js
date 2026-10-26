@@ -124,8 +124,8 @@ function safeEqual(a, b) {
 }
 
 // Hạn thời gian sống của Challenge WebAuthn (2 phút theo OWASP/NIST)
-const CHALLENGE_TTL_MS = 2 * 60 * 1000;
-function isChallengeExpired(createdAt) {
+export const CHALLENGE_TTL_MS = 2 * 60 * 1000;
+export function isChallengeExpired(createdAt) {
   return !createdAt || (Date.now() - createdAt) > CHALLENGE_TTL_MS;
 }
 
@@ -240,14 +240,19 @@ router.post('/register-options', async (req, res) => {
 
 // 2. API Xác thực Đăng ký (Chấm điểm)
 router.post('/register-verify', async (req, res) => {
-  const check = validateUsername(req.body.username);
-  if (!check.valid) {
+  const sessionUsername = req.session.registeringUsername;
+  const bodyUsername = req.body?.username ? String(req.body.username).trim() : '';
+
+  // BẢO MẬT (A11 / M9): Không tin tưởng req.body.username, phải khớp tuyệt đối với Session gốc
+  if (!sessionUsername || sessionUsername.toLowerCase() !== bodyUsername.toLowerCase()) {
     return res.status(400).json({
       verified: false,
-      error: check.error
+      error: 'Dữ liệu phiên đăng ký không hợp lệ, không khớp hoặc đã hết hạn!'
     });
   }
-  const username = check.username;
+
+  // Sử dụng trực tiếp username từ Session làm Single Source of Truth
+  const username = sessionUsername;
   const { response } = req.body;
 
   // Kiểm tra response object hợp lệ
@@ -262,14 +267,6 @@ router.post('/register-verify', async (req, res) => {
   debugLog('[ĐĂNG KÝ] Bắt đầu xác thực');
   debugLog('[ĐĂNG KÝ] Username:', username);
   debugLog('==========================================');
-
-  // Kiểm tra tên gửi lên phải khớp với tên trong phiên đăng ký ban đầu
-  if (!req.session.registeringUsername || req.session.registeringUsername.toLowerCase() !== username.toLowerCase()) {
-    return res.status(400).json({
-      verified: false,
-      error: 'Dữ liệu phiên đăng ký không hợp lệ hoặc đã hết hạn!'
-    });
-  }
 
   // Lấy lại Đề thi gốc từ trong túi cá nhân (Session) ra để đối chiếu
   const expectedChallenge = req.session.currentChallenge;
