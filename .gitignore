@@ -3,3 +3,14 @@ node_modules/
 .vs/
 data/
 .env
+# Tai lieu bao cao
+BAO_CAO_CHUYEN_SAU_FIDO2.md
+baocaobmtt.pdf
+LEADER_GUIDE.md
+
+# Scripts noi bo & Tests
+reset-db.js
+tests/
+
+# Video demo
+*.mp4

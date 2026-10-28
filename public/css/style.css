@@ -9,12 +9,18 @@
 }
 
 :root {
-    --plum-primary: #0056b3;      /* Xanh dương HUTECH đồng bộ nút Quét Thẻ SV */
-    --plum-dark: #003d82;         /* Xanh dương đậm khi di chuột (hover) */
-    --hutech-cyan: #38bdf8;       /* Xanh sáng điểm nhấn */
-    --hutech-yellow: #ffc72c;     /* Vàng thương hiệu HUTECH */
-    --text-main: #0f172a;         /* Chữ xanh đen đậm sắc nét */
-    --text-muted: #64748b;        /* Chữ xám phụ */
+    --plum-primary: #0056b3;
+    /* Xanh dương HUTECH đồng bộ nút Quét Thẻ SV */
+    --plum-dark: #003d82;
+    /* Xanh dương đậm khi di chuột (hover) */
+    --hutech-cyan: #38bdf8;
+    /* Xanh sáng điểm nhấn */
+    --hutech-yellow: #ffc72c;
+    /* Vàng thương hiệu HUTECH */
+    --text-main: #0f172a;
+    /* Chữ xanh đen đậm sắc nét */
+    --text-muted: #64748b;
+    /* Chữ xám phụ */
     --success: #10b981;
     --danger: #ef4444;
 }
@@ -123,8 +129,15 @@ body {
     transform: rotate(-35deg);
 }
 
-.line-1 { top: 70px; left: 110px; }
-.line-2 { bottom: 150px; left: 55px; }
+.line-1 {
+    top: 70px;
+    left: 110px;
+}
+
+.line-2 {
+    bottom: 150px;
+    left: 55px;
+}
 
 /* Vòng tròn trung tâm dạng kính mờ (Glassmorphism) giống huy hiệu Bảo mật FIDO2 */
 .illustration-circle {
@@ -155,8 +168,15 @@ body {
 }
 
 @keyframes floatAstro {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-8px); }
+
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
 }
 
 /* Bong bóng Passkey màu xanh đen Navy */
@@ -362,9 +382,9 @@ body {
     padding: 12px 18px;
     background: linear-gradient(135deg, #0f3d5e 0%, #0056b3 100%);
     color: #ffffff;
-    border: none;
+    border: 2px solid transparent;
     border-radius: 10px;
-    font-size: 0.94rem;
+    font-size: 0.95rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -423,9 +443,17 @@ button:disabled {
 }
 
 @keyframes buttonPop {
-    0% { transform: scale(1); }
-    40% { transform: scale(1.07); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    40% {
+        transform: scale(1.07);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 /* =========================================================
@@ -477,9 +505,20 @@ button:disabled {
 }
 
 @keyframes miniPopupBounce {
-    0% { opacity: 0; transform: translateY(-8px) scale(0.92); }
-    70% { opacity: 1; transform: translateY(2px) scale(1.03); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+    0% {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.92);
+    }
+
+    70% {
+        opacity: 1;
+        transform: translateY(2px) scale(1.03);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 /* =========================================================
