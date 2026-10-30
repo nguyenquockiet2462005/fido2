@@ -1,34 +1,17 @@
 /**
- * db.js - Cơ sở dữ liệu giả lập trong bộ nhớ RAM (In-Memory Database)
- * 
- * TẠI SAO LẠI DÙNG FILE NÀY?
- * - Giúp toàn bộ nhóm không cần cài đặt MySQL hay MongoDB phức tạp.
- * - Dữ liệu được lưu trong mảng JavaScript `users`, tồn tại suốt quá trình Server chạy.
- * - Cung cấp các hàm tìm kiếm và lưu người dùng chuẩn xác theo quy chuẩn FIDO2.
+ * db.js - Cơ chế lưu trữ dữ liệu linh hoạt (Hybrid Persistence: RAM + JSON + MongoDB Atlas)
+ *
+ * NGUYÊN LÝ HOẠT ĐỘNG:
+ * 1. Lưu trữ trong RAM (Cache) để đọc/ghi tốc độ cao theo chuẩn FIDO2.
+ * 2. Tự động đồng bộ nguyên tử (Atomic write) ra file `data/users.json` cục bộ (có sao lưu khi file lỗi).
+ * 3. Tự động đồng bộ ngầm lên MongoDB Atlas (nếu có `MONGODB_URI`) kèm hàng đợi `pendingCloudSync`.
+ * 4. Tự động chuyển đổi khóa công khai (`publicKey`) giữa `Uint8Array` (RAM) và `Base64URL` (Storage).
  */
 
-// Mảng lưu danh sách người dùng trong RAM
-// Cấu trúc một User chuẩn FIDO2:
-// {
-//   id: "user-1711234567890",              // Chuỗi ID độc nhất (gắn liền với Passkey)
-//   username: "kiet",                       // Tên tài khoản
-//   credentials: [                          // Danh sách các khóa Passkey đã đăng ký
-//     {
-//       id: "base64url-credential-id...",   // Mã định danh của khóa
-//       publicKey: Uint8Array([...]),       // KHÓA CÔNG KHAI (Dùng để kiểm tra chữ ký)
-//       counter: 0,                         // Bộ đếm số lần xác thực (chống clone khóa)
-//       transports: ["internal"]            // Loại thiết bị (internal: vân tay máy tính/điện thoại, usb: YubiKey)
-//     }
-//   ]
-// }
-/**
- * db.js - Cơ chế lưu trữ dữ liệu linh hoạt (Hybrid Persistence)
- * 
- * NGUYÊN LÝ HOẠT ĐỘNG:
- * 1. Lưu trữ trong RAM (Cache) để đọc/ghi siêu tốc.
- * 2. Tự động đồng bộ ra file `data/users.json` để không bị mất dữ liệu khi restart server.
- * 3. Bảo vệ kiểu dữ liệu Uint8Array của Khóa công khai (Public Key).
- */
+// Tự động nạp file .env sớm nhất (do ES Module hoist lệnh import trước khi server.js chạy)
+if (typeof process.loadEnvFile === 'function') {
+  try { process.loadEnvFile(); } catch (_) { }
+}
 
 import fs from 'fs';
 import path from 'path';
@@ -38,18 +21,23 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const DB_NAME = 'fido2_db';
+const USERS_COLLECTION = 'users';
 
-// Đường dẫn tới thư mục và file lưu dữ liệu
 const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'users.json');
+const DATA_FILE = process.env.USERS_DATA_FILE
+  ? path.resolve(process.env.USERS_DATA_FILE)
+  : path.join(DATA_DIR, 'users.json');
+
+export const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').trim();
+const DEFAULT_UNIVERSITY = 'Đại học Công nghệ Tp.HCM (HUTECH)';
 
 // Kho lưu trữ danh sách người dùng trong bộ nhớ RAM
-// const users = [];
 let users = [];
 
 /**
  * Chuyển đổi Khóa công khai sang chuỗi Base64URL trước khi lưu trữ
- * Đảm bảo mỗi khóa chỉ chiếm 1 dòng duy nhất trong CSDL (giảm 74% dung lượng)
+ * Giúp lưu gọn khóa nhị phân trên một dòng JSON/BSON duy nhất
  */
 export function toBase64UrlKey(pk) {
   if (typeof pk === 'string') return pk;
@@ -60,7 +48,7 @@ export function toBase64UrlKey(pk) {
 }
 
 /**
- * Chuẩn hóa Khóa công khai thành Uint8Array khi đọc ra từ CSDL
+ * Chuẩn hóa Khóa công khai thành Uint8Array khi đưa vào RAM
  * Phục vụ trực tiếp cho thư viện @simplewebauthn/server xác thực chữ ký
  */
 export function normalizePublicKey(pk) {
@@ -71,28 +59,105 @@ export function normalizePublicKey(pk) {
   return pk;
 }
 
+/**
+ * Chuẩn hóa cấu trúc hồ sơ (profile): giữ nguyên các trường mở rộng sẵn có
+ * và điền giá trị mặc định an toàn cho các trường còn thiếu
+ */
+function buildDefaultProfile(username, existing) {
+  const base = existing && typeof existing === 'object' ? existing : {};
+  return {
+    ...base,
+    fullName: base.fullName || username,
+    studentId: base.studentId ?? '',
+    dob: base.dob ?? '',
+    academicYear: base.academicYear ?? '',
+    faculty: base.faculty ?? '',
+    university: base.university || DEFAULT_UNIVERSITY,
+    isVerifiedCard: Boolean(base.isVerifiedCard),
+    avatar: base.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
+    verifiedAt: base.verifiedAt || base.updatedAt || null,
+  };
+}
+
+/**
+ * Chuẩn hóa một bản ghi người dùng khi nạp từ File JSON hoặc MongoDB Atlas vào RAM
+ * BẢO MẬT: Quyền 'admin' được suy ra từ cấu hình máy chủ (ADMIN_USERNAME), không tin dữ liệu lưu trữ
+ */
+function normalizeUserRecord(rawUser) {
+  const user = { ...rawUser };
+  delete user._id; // Loại bỏ ObjectId nội bộ của MongoDB
+
+  const cleanUsername = String(user.username).trim();
+  const isAdminAccount = cleanUsername.toLowerCase() === ADMIN_USERNAME.toLowerCase();
+
+  return {
+    ...user,
+    username: cleanUsername,
+    role: isAdminAccount ? 'admin' : 'student',
+    profile: buildDefaultProfile(cleanUsername, user.profile),
+    credentials: Array.isArray(user.credentials)
+      ? user.credentials.map(cred => ({
+        ...cred,
+        publicKey: normalizePublicKey(cred.publicKey),
+      }))
+      : [],
+  };
+}
+
+/**
+ * Chuẩn hóa danh sách người dùng an toàn: cô lập lỗi từng bản ghi để một bản ghi hỏng
+ * không làm mất toàn bộ danh sách người dùng còn lại
+ */
+function safeNormalizeUsers(rawList, sourceLabel = 'DB') {
+  if (!Array.isArray(rawList)) {
+    throw new Error(`Dữ liệu từ ${sourceLabel} không phải là mảng JSON hợp lệ.`);
+  }
+  const validUsers = [];
+  for (const item of rawList) {
+    try {
+      if (!item || typeof item.username !== 'string' || !item.username.trim()) {
+        console.warn(`⚠️ [${sourceLabel}] Bỏ qua bản ghi thiếu username hợp lệ.`);
+        continue;
+      }
+      validUsers.push(normalizeUserRecord(item));
+    } catch (err) {
+      console.warn(`⚠️ [${sourceLabel}] Bỏ qua bản ghi lỗi (${item?.username || 'unknown'}):`, err.message);
+    }
+  }
+  return validUsers;
+}
+
+/**
+ * Tạo bản sao người dùng với publicKey ở dạng Base64URL trước khi ghi ra đĩa/Cloud
+ * (Không làm biến đổi Uint8Array đang giữ trong RAM)
+ */
+function serializeUserForStorage(user) {
+  return {
+    ...user,
+    credentials: (user.credentials || []).map(c => ({
+      ...c,
+      publicKey: toBase64UrlKey(c.publicKey),
+    })),
+  };
+}
+
 // ==========================================
 // 1. CÁC HÀM ĐỒNG BỘ DỮ LIỆU (DUAL-ENGINE: LOCAL FILE + CLOUD MONGODB)
 // ==========================================
 let mongoClient = null;
 let mongoCollection = null;
 let isCloudSyncing = false;
+let pendingCloudSync = false;
 
-// Lưu cục bộ xuống file users.json (Atomic write chống corrupt file)
+// Lưu cục bộ xuống file users.json (Atomic write chống hỏng file khi mất điện/crash)
 function saveUsersToFileLocal() {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const targetDir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
-    // 🛡️ Đảm bảo publicKey luôn là chuỗi Base64URL 1 dòng duy nhất khi lưu vào JSON
-    const sanitizedUsers = users.map(u => ({
-      ...u,
-      credentials: (u.credentials || []).map(c => ({
-        ...c,
-        publicKey: toBase64UrlKey(c.publicKey)
-      }))
-    }));
-    const tempFile = path.join(DATA_DIR, `users_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.tmp`);
+    const sanitizedUsers = users.map(serializeUserForStorage);
+    const tempFile = path.join(targetDir, `users_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.tmp`);
     fs.writeFileSync(tempFile, JSON.stringify(sanitizedUsers, null, 2), 'utf-8');
     fs.renameSync(tempFile, DATA_FILE);
   } catch (error) {
@@ -100,27 +165,24 @@ function saveUsersToFileLocal() {
   }
 }
 
-// Đồng bộ dữ liệu lên MongoDB Atlas (chạy ngầm không gây block request)
+// Đồng bộ dữ liệu lên MongoDB Atlas (chạy ngầm kèm cờ pendingCloudSync chống bỏ sót thay đổi)
 async function syncUsersToCloud() {
-  if (!mongoCollection || isCloudSyncing) return;
+  if (!mongoCollection) return;
+  if (isCloudSyncing) {
+    pendingCloudSync = true;
+    return;
+  }
   try {
     isCloudSyncing = true;
     const currentIds = users.map(u => u.id);
-    // Xóa những user không còn tồn tại trong RAM (nếu có tài khoản bị hủy)
     await mongoCollection.deleteMany({ id: { $nin: currentIds } });
 
     if (users.length > 0) {
       const ops = users.map(u => ({
         replaceOne: {
           filter: { id: u.id },
-          replacement: {
-            ...u,
-            credentials: (u.credentials || []).map(c => ({
-              ...c,
-              publicKey: toBase64UrlKey(c.publicKey)
-            }))
-          },
-          upsert: true
+          replacement: serializeUserForStorage(u),
+          upsert: true,
         }
       }));
       await mongoCollection.bulkWrite(ops);
@@ -129,10 +191,14 @@ async function syncUsersToCloud() {
     console.error('⚠️ [DB-CLOUD] Lỗi đồng bộ ngầm lên MongoDB Atlas:', err.message);
   } finally {
     isCloudSyncing = false;
+    if (pendingCloudSync) {
+      pendingCloudSync = false;
+      syncUsersToCloud();
+    }
   }
 }
 
-// Hàm lưu dữ liệu tổng hợp: Vừa lưu local file, vừa đẩy lên Cloud MongoDB
+// Lưu dữ liệu tổng hợp: Vừa lưu local file, vừa đẩy lên Cloud MongoDB
 function saveUsersToFile() {
   saveUsersToFileLocal();
   if (mongoCollection) {
@@ -142,7 +208,7 @@ function saveUsersToFile() {
 
 /**
  * Khởi tạo kết nối MongoDB Atlas (Nếu có biến MONGODB_URI)
- * Giữ dữ liệu vĩnh viễn trên Render dù server có restart/sleep
+ * Giữ dữ liệu bền vững trên Cloud dù server có restart/sleep
  */
 export async function initMongoDB() {
   const uri = process.env.MONGODB_URI;
@@ -156,24 +222,15 @@ export async function initMongoDB() {
     const { MongoClient } = await import('mongodb');
     mongoClient = new MongoClient(uri);
     await mongoClient.connect();
-    const db = mongoClient.db('fido2_db');
-    mongoCollection = db.collection('users');
+    const db = mongoClient.db(DB_NAME);
+    mongoCollection = db.collection(USERS_COLLECTION);
     console.log('🍃 [DB] Kết nối MongoDB Atlas THÀNH CÔNG! Dữ liệu đã được bảo toàn trên Cloud.');
 
     // Nạp dữ liệu từ Cloud vào RAM
     const cloudCount = await mongoCollection.countDocuments();
     if (cloudCount > 0) {
       const cloudUsers = await mongoCollection.find({}).toArray();
-      users = cloudUsers.map(user => {
-        const { _id, ...rest } = user;
-        return {
-          ...rest,
-          credentials: (rest.credentials || []).map(cred => ({
-            ...cred,
-            publicKey: normalizePublicKey(cred.publicKey),
-          }))
-        };
-      });
+      users = safeNormalizeUsers(cloudUsers, 'DB-CLOUD');
       console.log(`📦 [DB-CLOUD] Đã tải và đồng bộ thành công ${users.length} tài khoản từ MongoDB Atlas vào RAM.`);
       saveUsersToFileLocal(); // Cập nhật lại file local làm bản sao lưu
     } else if (users.length > 0) {
@@ -186,40 +243,25 @@ export async function initMongoDB() {
   }
 }
 
-// Hàm nạp dữ liệu từ file JSON vào RAM khi khởi động
+// Nạp dữ liệu từ file JSON vào RAM khi khởi động
 function loadUsersFromFile() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const rawData = fs.readFileSync(DATA_FILE, 'utf-8');
-      const parsedUsers = JSON.parse(rawData);
+  if (!fs.existsSync(DATA_FILE)) {
+    console.log('📦 [DB] Chưa có file users.json, khởi tạo kho dữ liệu mới.');
+    return;
+  }
 
-      // 💡 Migration tự động: Bổ sung role và profile chuẩn nếu tài khoản cũ chưa có
-      // CHÚ Ý AN NINH: Chỉ tài khoản 'admin' chính thức mới có quyền admin
-      users = parsedUsers.map(user => ({
-        ...user,
-        role: user.username.toLowerCase() === 'admin' && user.role === 'admin' ? 'admin' : (user.username.toLowerCase() === 'admin' ? 'admin' : 'student'),
-        profile: {
-          fullName: user.profile?.fullName || user.username,
-          studentId: user.profile?.studentId || '',
-          dob: user.profile?.dob || '',
-          academicYear: user.profile?.academicYear || '',
-          faculty: user.profile?.faculty || '',
-          university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
-          isVerifiedCard: user.profile?.isVerifiedCard || false,
-          avatar: user.profile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`,
-          verifiedAt: user.profile?.verifiedAt || null
-        },
-        credentials: (user.credentials || []).map(cred => ({
-          ...cred,
-          publicKey: normalizePublicKey(cred.publicKey),
-        }))
-      }));
-      console.log(`📦 [DB] Đã khôi phục và chuẩn hóa thành công ${users.length} tài khoản từ data/users.json`);
-    } else {
-      console.log('📦 [DB] Chưa có file users.json, khởi tạo kho dữ liệu mới.');
-    }
+  try {
+    const rawData = fs.readFileSync(DATA_FILE, 'utf-8');
+    const parsedUsers = JSON.parse(rawData);
+    users = safeNormalizeUsers(parsedUsers, 'DB-LOCAL');
+    console.log(`📦 [DB] Đã khôi phục và chuẩn hóa thành công ${users.length} tài khoản từ data/users.json`);
   } catch (error) {
     console.error('⚠️ [DB] Lỗi khi đọc file users.json:', error.message);
+    try {
+      const backupFile = `${DATA_FILE}.corrupt-${Date.now()}`;
+      fs.copyFileSync(DATA_FILE, backupFile);
+      console.error(`🛡️ [DB] Đã sao lưu file lỗi sang: ${backupFile}`);
+    } catch (_) { }
     users = [];
   }
 }
@@ -228,8 +270,6 @@ function loadUsersFromFile() {
  * BẢO MẬT: Khởi tạo tài khoản Admin mặc định (Seed / Biến môi trường)
  * Tránh lỗ hổng 'ai đăng ký trước sẽ thành admin'
  */
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-
 export function seedAdminUser() {
   const existingAdmin = users.find(u => u.username.toLowerCase() === ADMIN_USERNAME.toLowerCase());
   if (!existingAdmin) {
@@ -238,18 +278,16 @@ export function seedAdminUser() {
       id: crypto.randomBytes(64).toString('base64url'),
       username: ADMIN_USERNAME,
       role: 'admin',
-      profile: {
+      profile: buildDefaultProfile(ADMIN_USERNAME, {
         fullName: 'Quản trị viên Hệ thống',
         studentId: 'ADMIN-01',
         dob: '01/01/2000',
         academicYear: 'N/A',
         faculty: 'Quản trị Hệ thống',
-        university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
         isVerifiedCard: true,
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${ADMIN_USERNAME}`,
-        verifiedAt: new Date().toISOString()
-      },
-      credentials: []
+        verifiedAt: new Date().toISOString(),
+      }),
+      credentials: [],
     };
     users.push(adminUser);
     saveUsersToFile();
@@ -260,7 +298,7 @@ export function seedAdminUser() {
   }
 }
 
-// Tự động gọi đọc file và seed admin ngay khi Server bật lên
+// Tự động đọc file và seed admin ngay khi Server khởi động
 loadUsersFromFile();
 seedAdminUser();
 
@@ -270,153 +308,93 @@ seedAdminUser();
 // ==========================================
 
 /**
- * Hàm tìm kiếm một người dùng trong kho theo tên đăng nhập
+ * Tìm kiếm người dùng theo tên đăng nhập (không phân biệt hoa thường)
  */
 export function findUserByUsername(username) {
   if (!username || typeof username !== 'string') return null;
   const normalized = username.trim().toLowerCase();
-  const user = users.find((user) => user.username.toLowerCase() === normalized) || null;
-  if (user && Array.isArray(user.credentials)) {
-    user.credentials.forEach(cred => {
-      cred.publicKey = normalizePublicKey(cred.publicKey);
-    });
-  }
-  return user;
+  return users.find(u => u.username.toLowerCase() === normalized) || null;
 }
 
 /**
  * Tìm kiếm người dùng dựa trên mã định danh Passkey (Credential ID)
- * Phục vụ luồng đăng nhập nhanh Usernameless (Không cần nhập username)
+ * Phục vụ luồng đăng nhập nhanh Usernameless (Discoverable Credentials / 1-chạm)
  */
 export function findUserByCredentialId(credentialId) {
   if (!credentialId || typeof credentialId !== 'string') return null;
-  const user = users.find(user =>
-    (user.credentials || []).some(cred => cred.id === credentialId)
+  return users.find(u =>
+    (u.credentials || []).some(cred => cred.id === credentialId)
   ) || null;
-  if (user && Array.isArray(user.credentials)) {
-    user.credentials.forEach(cred => {
-      cred.publicKey = normalizePublicKey(cred.publicKey);
-    });
-  }
-  return user;
 }
 
-// Hàm tạo một người dùng mới và cất vào kho
+/**
+ * Tạo người dùng mới sau khi xác thực sinh trắc học thành công
+ * BẢO MẬT (W3C WebAuthn §5.4.3): User handle (id) là 64 random bytes từ CSPRNG, không chứa PII
+ */
 export function createUser(username, customId = null) {
-  const cleanUsername = String(username).trim();
+  if (!username || typeof username !== 'string' || !username.trim()) {
+    throw new Error('Tên đăng nhập không hợp lệ!');
+  }
+  const cleanUsername = username.trim();
+  if (findUserByUsername(cleanUsername)) {
+    throw new Error(`Tài khoản đã tồn tại: ${cleanUsername}`);
+  }
+
   const newUser = {
-    // BẢO MẬT (W3C WebAuthn §5.4.3 & OWASP): 64 byte ngẫu nhiên mật mã (CSPRNG via crypto.randomBytes)
-    // Không chứa thông tin định danh cá nhân (PII) như username hay timestamp
     id: customId || crypto.randomBytes(64).toString('base64url'),
     username: cleanUsername,
-    // BẢO MẬT: Mọi tài khoản đăng ký qua form công khai LUÔN LUÔN là student
     role: 'student',
-    profile: {
-      fullName: cleanUsername,
-      studentId: '',
-      dob: '',
-      academicYear: '',
-      faculty: '',
-      university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
-      isVerifiedCard: false,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
-      verifiedAt: null
-    },
+    profile: buildDefaultProfile(cleanUsername),
     credentials: [],
   };
   users.push(newUser);
-  saveUsersToFile(); // Tự động lưu
+  saveUsersToFile();
   return newUser;
 }
 
-// Giải thích từng chi tiết:
-// id: Chuẩn W3C WebAuthn (§5.4.3) quy định user handle (userID) là chuỗi byte mờ đục (opaque) tối đa 64 bytes, khuyến nghị dùng 64 random bytes từ bộ sinh số ngẫu nhiên an toàn mật mã (CSPRNG). Tuyệt đối không chứa thông tin định danh cá nhân (PII) hay timestamp dễ đoán.
-// credentials: []: Đây là điểm đặc biệt nhất của Passkey! Tài khoản vừa tạo sẽ không có trường password, chỉ có một mảng rỗng sẵn sàng để đón chìa khóa sau khi người dùng quét vân tay.
-// users.push(newUser): Giống như hành động INSERT INTO users trong cơ sở dữ liệu, lưu tài khoản vào bộ nhớ RAM.
-//
-// * Sau này nó dùng ở đâu trong quy trình FIDO2? *
-// Khi người dùng nhập tên kiet và bấm "Đăng ký bằng Passkey":
-// Backend kiểm tra bằng hàm findUserByUsername("kiet") (ở Đoạn 2) xem tên đã có chưa.
-// Nếu chưa có -> Backend lập tức gọi hàm createUser("kiet") này để sinh ra userID.
-// Backend lấy userID đó gói vào gói tin Challenge gửi cho trình duyệt, báo cho máy tính biết: "Hãy tạo một cặp chìa khóa gắn liền với userID này".
-
-// ** Hàm cất chìa khoá passkey vào tài khoản của người dùng **
+/**
+ * Lưu khóa Passkey mới vào tài khoản người dùng (hỗ trợ nhiều thiết bị trên 1 tài khoản)
+ */
 export function addCredentialToUser(username, credentialInfo) {
-  const user = findUserByUsername(username); // tìm người dùng trong kho có tồn tại không
-  if (!user) { //nếu không!!
+  const user = findUserByUsername(username);
+  if (!user) {
     throw new Error(`Không tìm thấy người dùng: ${username}`);
-  } //nếu có
+  }
 
-  // Đảm bảo mảng credentials luôn tồn tại trước khi push (phòng ngừa lỗi)
   if (!Array.isArray(user.credentials)) {
     user.credentials = [];
   }
   user.credentials.push({
     ...credentialInfo,
-    publicKey: toBase64UrlKey(credentialInfo.publicKey)
-  }); //nhét chìa khoá mới vào mảng creadentials của người đó
-  saveUsersToFile(); // Tự động lưu
+    publicKey: normalizePublicKey(credentialInfo.publicKey),
+  });
+  saveUsersToFile();
   return user;
 }
 
-// ** credentialInfo là cái gì? **
-// Đây là một gói thông tin chứa:
-// - id: Mã số của chìa khóa.
-// - publicKey: Khóa công khai (Server cất khóa này lại để những lần đăng nhập sau, bạn quét vân tay gửi chữ ký lên thì Server lấy khóa này ra "soi" xem chữ ký có khớp không).
-// - counter: Số đếm số lần sử dụng chìa khóa.
-// *** user.credentials.push(credentialInfo): ***
-// Một người dùng có thể đăng ký nhiều chìa khóa khác nhau (ví dụ: Chìa khóa TouchID trên MacBook, Chìa khóa Windows Hello trên laptop Dell, hoặc khóa cắm cổng USB YubiKey). Lệnh .push() này cho phép bạn thêm nhiều chìa khóa vào cùng 1 tài khoản!
-
-// *** Sau này nó dùng ở đâu trong quy trình FIDO2? *** 
-// Hàm này sẽ được Người 2 (Backend) gọi ở bước cuối cùng của Luồng Đăng ký:
-
-// - Trình duyệt gửi gói tin vân tay vừa quét lên Server.
-// - Server dùng thư viện @simplewebauthn/server kiểm tra gói tin hợp lệ.
-// - Server gọi ngay: addCredentialToUser("kiet", { id, publicKey, counter }).
-// Kể từ lúc này, bạn đã chính thức có một tài khoản được bảo vệ bằng Passkey!
-
-
-// *** Hàm cập nhật bộ đếm ***
-// export function updateCredentialCounter(username, credentialId, newCounter){
-//   const user = findUserByUsername(username);
-//   if (!user) return;
-// // Tìm đúng chiếc chìa khoá vừa dùng để đăng nhập
-//   const cred = user.credentials.find((c) => c.id === credentialId);
-//   if (cred) {
-//     cred.counter = newCounter; //Cập nhật lại số đếm mới (tránh trùng lặp)
-//   }
-// }
-
-// // *** Hàm lấy toàn bộ danh sách người dùng (dùng để kiểm tra dữ liệu và hiển thị)  
-
-// export function getAllUsers() {
-//   return users;
-// }
-
+/**
+ * Cập nhật bộ đếm chữ ký (Sign Counter) sau mỗi lần xác thực thành công
+ * BẢO MẬT FIDO2: Phát hiện hành vi sao chép (clone) khóa phần cứng
+ */
 export function updateCredentialCounter(username, credentialId, newCounter) {
   const user = findUserByUsername(username);
   if (!user) {
     throw new Error(`Không tìm thấy người dùng: ${username}`);
   }
-  const cred = user.credentials.find((c) => c.id === credentialId);
+  const cred = user.credentials.find(c => c.id === credentialId);
   if (!cred) {
     throw new Error(`Không tìm thấy credential với id: ${credentialId}`);
   }
   cred.counter = newCounter;
-  saveUsersToFile(); // Tự động lưu
-}
-export function getAllUsers() {
-  return [...users]; // Trả về bản sao để bảo vệ mảng gốc
+  saveUsersToFile();
 }
 
-// *** Giải thích từng chi tiết:
-// Tại sao phải có hàm updateCredentialCounter? (Nguyên lý bảo mật FIDO2)
-// Mỗi lần bạn chạm vân tay để đăng nhập, con chip bảo mật trên máy tính sẽ tự động cộng thêm 1 đơn vị vào số đếm (ví dụ từ 1 -> 2 -> 3).
-// Khi Server xác minh xong, nó phải cập nhật lại số đếm mới này vào tài khoản.
-// Nếu lần sau có ai đó gửi lên chữ ký với số đếm cũ (hoặc nhỏ hơn), Server sẽ biết ngay là có kẻ gian đang cố gắng sao chép chiếc chìa khóa đó!
-// Hàm getAllUsers() để làm gì?
-// Đơn giản là trả về toàn bộ mảng users.
-// Nhóm bạn và Người 4 (UI) có thể gọi hàm này để in danh sách tài khoản ra giao diện web, giúp thầy cô khi chấm bài nhìn thấy tận mắt chiếc chìa khóa (Public Key) vừa được lưu vào RAM như thế nào.
+/**
+ * Lấy danh sách toàn bộ người dùng (trả về bản sao nông của mảng users)
+ */
+export function getAllUsers() {
+  return [...users];
+}
 
 /**
  * BẢO MẬT: Cập nhật hồ sơ sinh viên sau khi đã xác thực nâng cao Step-Up FIDO2
@@ -427,6 +405,7 @@ export function updateUserProfile(username, updatedData) {
     throw new Error(`Không tìm thấy tài khoản: ${username}`);
   }
 
+  const now = new Date().toISOString();
   user.profile = {
     ...user.profile,
     fullName: updatedData.fullName || user.profile?.fullName || user.username,
@@ -434,13 +413,31 @@ export function updateUserProfile(username, updatedData) {
     dob: updatedData.dob !== undefined ? updatedData.dob : user.profile?.dob || '',
     faculty: updatedData.faculty !== undefined ? updatedData.faculty : user.profile?.faculty || '',
     academicYear: updatedData.academicYear !== undefined ? updatedData.academicYear : user.profile?.academicYear || '',
-    university: 'Đại học Công nghệ Tp.HCM (HUTECH)',
+    university: user.profile?.university || DEFAULT_UNIVERSITY,
     isVerifiedCard: true,
-    updatedAt: new Date().toISOString()
+    verifiedAt: user.profile?.verifiedAt || now,
+    updatedAt: now,
   };
 
   saveUsersToFile();
   return user.profile;
 }
 
-
+/**
+ * Xóa người dùng theo username (Phục vụ dọn dẹp dữ liệu kiểm thử tự động;
+ * không cho phép xóa tài khoản Quản trị viên hệ thống)
+ */
+export function deleteUser(username) {
+  if (!username || typeof username !== 'string') return false;
+  const normalized = username.trim().toLowerCase();
+  if (normalized === ADMIN_USERNAME.toLowerCase()) {
+    return false;
+  }
+  const initialLength = users.length;
+  users = users.filter(u => u.username.toLowerCase() !== normalized);
+  if (users.length !== initialLength) {
+    saveUsersToFile();
+    return true;
+  }
+  return false;
+}

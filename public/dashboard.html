@@ -60,7 +60,7 @@
                     <img src="https://api.dicebear.com/7.x/bottts/svg?seed=admin" alt="Admin" class="user-avatar"
                         id="admin-avatar">
                 </div>
-                <button onclick="logoutAdmin()" class="nav-btn logout-btn" title="Đăng xuất">
+                <button id="btn-logout-admin" class="nav-btn logout-btn" title="Đăng xuất">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                         <path
                             d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
@@ -91,7 +91,7 @@
                             <path d="M6 9l6 6 6-6" />
                         </svg>
                     </div>
-                    <button onclick="fetchUsers()" class="btn-refresh" title="Làm mới dữ liệu">
+                    <button id="btn-refresh-top" class="btn-refresh" title="Làm mới dữ liệu">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2">
                             <path d="M23 4v6h-6M1 20v-6h6" />
@@ -147,7 +147,7 @@
                     </div>
                     <div class="metric-data">
                         <div class="metric-val" id="stat-total-counters">0</div>
-                        <div class="metric-lbl">Lần xác thực</div>
+                        <div class="metric-lbl">Sign Counter</div>
                     </div>
                 </div>
             </section>
@@ -157,8 +157,8 @@
                 <div class="panel-box chart-panel">
                     <div class="panel-header">
                         <div>
-                            <h3 class="panel-title">Tần Suất Xác Thực Sinh Trắc Học</h3>
-                            <p class="panel-subtitle">Theo dõi hoạt động đăng nhập FIDO2 theo thời gian</p>
+                            <h3 class="panel-title">Xu Hướng Xác Thực Sinh Trắc Học (Dữ liệu minh họa)</h3>
+                            <p class="panel-subtitle">Mô phỏng tần suất hoạt động FIDO2 theo thời gian</p>
                         </div>
                         <div class="chart-tabs">
                             <span class="tab">NGÀY</span>
@@ -167,15 +167,15 @@
                             <span class="tab">NĂM</span>
                             <div class="legend-dots">
                                 <span class="dot dot-online">Online</span>
-                                <span class="dot dot-offline">Offline</span>
+                                <span class="dot dot-offline">Đăng ký mới</span>
                             </div>
                         </div>
                     </div>
                     <div class="chart-content-split">
                         <div class="chart-stats-mini">
                             <div class="stat-highlight">
-                                <div class="stat-number">98.5%</div>
-                                <div class="stat-desc">Tỉ lệ xác thực thành công</div>
+                                <div class="stat-number" id="stat-passkey-coverage">100%</div>
+                                <div class="stat-desc">Tài khoản có Passkey</div>
                             </div>
                             <div class="stat-highlight">
                                 <div class="stat-number">100%</div>
@@ -187,50 +187,23 @@
                             <canvas id="lineChart"></canvas>
                         </div>
                     </div>
-                    <div class="sub-metrics-bar">
-                        <div class="sub-item">
-                            <div> </div>
-                            <div>
-
-                            </div>
-                        </div>
-                        <div class="sub-item">
-                            <div> </div>
-                            <div>
-
-                            </div>
-                        </div>
-                        <div class="sub-item">
-                            <div> </div>
-                            <div>
-
-                            </div>
-                        </div>
-                        <div class="sub-item">
-                            <div> </div>
-                            <div>
-
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="panel-box analytics-panel">
                     <div class="panel-header">
-                        <h3 class="panel-title">Analytics</h3>
-
+                        <h3 class="panel-title">Phân Bổ Tài Khoản (Thực tế)</h3>
                     </div>
                     <div class="doughnut-container">
                         <canvas id="doughnutChart"></canvas>
                         <div class="doughnut-center-text">
-                            <span class="pct">100%</span>
-                            <span class="desc">Bảo mật</span>
+                            <span class="pct" id="doughnut-pct">100%</span>
+                            <span class="desc">Có Passkey</span>
                         </div>
                     </div>
                     <div class="doughnut-legend">
-                        <span class="item"><i class="sq sq-purple"></i> Vân tay / FaceID</span>
-                        <span class="item"><i class="sq sq-yellow"></i> Khóa YubiKey</span>
-                        <span class="item"><i class="sq sq-orange"></i> Khác</span>
+                        <span class="item"><i class="sq sq-purple"></i> SV đã xác thực Step-Up</span>
+                        <span class="item"><i class="sq sq-yellow"></i> SV có Passkey cơ bản</span>
+                        <span class="item"><i class="sq sq-orange"></i> Quản trị viên (Admin)</span>
                     </div>
                 </div>
             </section>
@@ -238,9 +211,9 @@
             <!-- HÀNG CUỐI: HOẠT ĐỘNG + BẢNG -->
             <section class="bottom-row">
                 <div class="panel-box activities-panel">
-                    <h3 class="panel-title" style="margin-bottom: 20px;">Hoạt Động Gần Đây</h3>
+                    <h3 class="panel-title activities-title">Hoạt Động Gần Đây</h3>
                     <div class="activity-list" id="activity-list">
-                        <p style="color: #9ca3af; font-size: 0.8rem;">Đang tải...</p>
+                        <p class="empty-hint">Đang tải...</p>
                     </div>
                 </div>
 
@@ -251,7 +224,7 @@
                             <p class="panel-subtitle">Tổng hợp hồ sơ và khóa công khai lưu trong Database</p>
                         </div>
                         <div class="table-actions">
-                            <button class="btn-ctrl btn-ghost" onclick="fetchUsers()" title="Làm mới">
+                            <button id="btn-refresh-table" class="btn-ctrl btn-ghost" title="Làm mới">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <path d="M23 4v6h-6M1 20v-6h6" />
@@ -259,8 +232,7 @@
                                 </svg>
                             </button>
                             <div class="search-box">
-                                <input type="text" id="user-search-input" placeholder="Tìm kiếm username, tên..."
-                                    oninput="filterUserTable()">
+                                <input type="text" id="user-search-input" placeholder="Tìm kiếm username, tên...">
                             </div>
                         </div>
                     </div>
@@ -296,7 +268,7 @@
         </main>
     </div>
 
-    <script src="js/dashboard.js"></script>
+    <script type="module" src="js/dashboard.js"></script>
 </body>
 
 </html>

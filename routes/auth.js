@@ -16,6 +16,7 @@ import {
 
 // Kéo các hàm làm việc với dữ liệu người dùng từ db.js
 import {
+  ADMIN_USERNAME,
   findUserByUsername,
   findUserByCredentialId,
   createUser,
@@ -28,8 +29,29 @@ const router = express.Router();
 
 // Cấu hình định danh cho máy chủ
 const rpName = 'FIDO2 Demo';
-const rpID = (process.env.RP_ID || 'localhost').trim();
+export const rpID = (process.env.RP_ID || 'localhost').trim();
 const isProduction = process.env.NODE_ENV === 'production';
+const RESERVED_USERNAMES = ['admin', 'administrator', 'root', 'system'];
+
+// Kiểm tra tên đăng nhập có phải là tài khoản Quản trị viên hệ thống hay không
+function isAdminUsername(username) {
+  return Boolean(username && String(username).trim().toLowerCase() === ADMIN_USERNAME.toLowerCase());
+}
+
+// Kiểm tra tài khoản đã có ít nhất 1 khóa Passkey hay chưa
+export function hasRegisteredPasskey(user) {
+  return Boolean(user && Array.isArray(user.credentials) && user.credentials.length > 0);
+}
+
+// Kiểm tra tài khoản Admin khởi tạo lần đầu (đã seed nhưng chưa gắn Passkey)
+function isInitialAdminSetup(user) {
+  return Boolean(
+    user &&
+    isAdminUsername(user.username) &&
+    user.role === 'admin' &&
+    !hasRegisteredPasskey(user)
+  );
+}
 
 // BẢO MẬT WEBAUTHN (W3C WebAuthn §13.4.1 & OWASP ASVS):
 // TRÊN PRODUCTION: CHỈ chấp nhận DUY NHẤT một Origin và một RP ID chính thức để chống Phishing và Relay Attack.
@@ -115,7 +137,7 @@ function validateUsername(rawUsername) {
 /**
  * So sánh chuỗi an toàn chống tấn công đo lường thời gian (Timing Attack / CWE-208)
  */
-function safeEqual(a, b) {
+export function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
   const x = Buffer.from(a);
   const y = Buffer.from(b);
@@ -130,11 +152,38 @@ export function isChallengeExpired(createdAt) {
 }
 
 // BẢO MẬT (CWE-532): Tránh log thông tin nhạy cảm (Challenge, Credential) trên production
-const debugLog = (...args) => {
+export const debugLog = (...args) => {
   if (!isProduction) console.log(...args);
 };
 
+// BẢO MẬT (CWE-209): Ẩn chi tiết lỗi nội bộ (err.message) trên Production
+export function getSafeErrorMessage(err, fallbackMsg) {
+  if (!isProduction && err?.message) {
+    return `${fallbackMsg} (${err.message})`;
+  }
+  return fallbackMsg;
+}
 
+// Middleware kiểm tra phiên đăng nhập và nạp thông tin người dùng hiện tại          
+export function requireAuth(req, res, next) {
+  if (!req.session?.loggedIn || !req.session?.username) {
+    return res.status(401).json({
+      success: false,
+      error: 'Vui lòng đăng nhập trước khi thực hiện thao tác này!'
+    });
+  }
+
+  const user = findUserByUsername(req.session.username);
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: 'Không tìm thấy thông tin tài khoản!'
+    });
+  }
+
+  req.user = user;
+  next();
+}
 
 // ==========================================
 // GIAI ĐOẠN 1: ĐĂNG KÝ (REGISTRATION)
@@ -142,7 +191,7 @@ const debugLog = (...args) => {
 
 // 1. API Tạo Challenge Đăng ký (Ra đề)
 router.post('/register-options', async (req, res) => {
-  const check = validateUsername(req.body.username);
+  const check = validateUsername(req.body?.username);
   if (!check.valid) {
     return res.status(400).json({
       error: check.error
@@ -153,17 +202,17 @@ router.post('/register-options', async (req, res) => {
   const existingUser = findUserByUsername(username);
 
   // BẢO MẬT: Xử lý tài khoản Admin và tài khoản hệ thống bảo lưu
-  const isSystemAdmin = username.toLowerCase() === 'admin';
+  const isSystemAdmin = isAdminUsername(username);
   if (isSystemAdmin) {
     // Nếu tài khoản admin ĐÃ có Passkey rồi -> Khóa tuyệt đối, không cho đăng ký lại
-    if (existingUser && existingUser.credentials && existingUser.credentials.length > 0) {
+    if (hasRegisteredPasskey(existingUser)) {
       return res.status(400).json({
         error: 'Tài khoản Admin đã được cài đặt Passkey! Vui lòng bấm Đăng nhập.'
       });
     }
     // BẢO MẬT (C2): Khóa quyền khởi tạo Passkey Admin lần đầu bằng mã cài đặt bí mật (ADMIN_SETUP_TOKEN)
     const requiredToken = process.env.ADMIN_SETUP_TOKEN;
-    const providedToken = req.body.setupToken || '';
+    const providedToken = req.body?.setupToken || '';
     if (!providedToken) {
       return res.status(403).json({
         needsAdminToken: true,
@@ -178,8 +227,7 @@ router.post('/register-options', async (req, res) => {
     req.session.adminSetupOk = true;
   } else {
     // Với các tài khoản bảo lưu khác
-    const OTHER_RESERVED = ['administrator', 'root', 'system'];
-    if (OTHER_RESERVED.includes(username.toLowerCase())) {
+    if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
       return res.status(400).json({
         error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
       });
@@ -209,8 +257,8 @@ router.post('/register-options', async (req, res) => {
       attestationType: 'none',
       excludeCredentials: [],
       authenticatorSelection: {
-        residentKey: 'preferred', //'discouraged',
-        userVerification: 'required' //'preferred'
+        residentKey: 'preferred',
+        userVerification: 'required'
       },
     });
 
@@ -241,6 +289,18 @@ router.post('/register-options', async (req, res) => {
 // 2. API Xác thực Đăng ký (Chấm điểm)
 router.post('/register-verify', async (req, res) => {
   const sessionUsername = req.session.registeringUsername;
+  const registeringUserId = req.session.registeringUserId;
+  const expectedChallenge = req.session.currentChallenge;
+  const challengeCreatedAt = req.session.challengeCreatedAt;
+  const adminSetupOk = Boolean(req.session.adminSetupOk);
+
+  // Hủy toàn bộ dữ liệu phiên đăng ký ngay lập tức (One-Time Use / Chống Replay Attack)
+  req.session.currentChallenge = null;
+  req.session.challengeCreatedAt = null;
+  req.session.registeringUserId = null;
+  req.session.registeringUsername = null;
+  req.session.adminSetupOk = false;
+
   const bodyUsername = req.body?.username ? String(req.body.username).trim() : '';
 
   // BẢO MẬT (A11 / M9): Không tin tưởng req.body.username, phải khớp tuyệt đối với Session gốc
@@ -256,14 +316,14 @@ router.post('/register-verify', async (req, res) => {
 
   // BẢO MẬT: Chặn ngay nếu tài khoản đã tồn tại (chống gán đè Passkey vào tài khoản có sẵn)
   const existingUserEarly = findUserByUsername(username);
-  const isInitialAdminEarly = existingUserEarly && existingUserEarly.username.toLowerCase() === 'admin' && existingUserEarly.role === 'admin' && (!existingUserEarly.credentials || existingUserEarly.credentials.length === 0);
+  const isInitialAdminEarly = isInitialAdminSetup(existingUserEarly);
   if (existingUserEarly && !isInitialAdminEarly) {
     return res.status(400).json({
       verified: false,
       error: 'Tài khoản này đã tồn tại. Không thể đăng ký đè Passkey!'
     });
   }
-  const { response } = req.body;
+  const { response } = req.body ?? {};
 
   // Kiểm tra response object hợp lệ
   if (!response || typeof response !== 'object' || !response.id) {
@@ -278,9 +338,6 @@ router.post('/register-verify', async (req, res) => {
   debugLog('[ĐĂNG KÝ] Username:', username);
   debugLog('==========================================');
 
-  // Lấy lại Đề thi gốc từ trong túi cá nhân (Session) ra để đối chiếu
-  const expectedChallenge = req.session.currentChallenge;
-
   if (!expectedChallenge) {
     return res.status(400).json({
       verified: false,
@@ -289,21 +346,12 @@ router.post('/register-verify', async (req, res) => {
   }
 
   // BẢO MẬT (M1): Kiểm tra thời hạn Challenge đăng ký (2 phút)
-  if (isChallengeExpired(req.session.challengeCreatedAt)) {
-    req.session.currentChallenge = null;
-    req.session.adminSetupOk = false;
+  if (isChallengeExpired(challengeCreatedAt)) {
     return res.status(400).json({
       verified: false,
       error: 'Phiên đăng ký đã quá hạn (2 phút). Vui lòng thực hiện lại!'
     });
   }
-
-  // Hủy Challenge ngay lập tức để chống tấn công phát lại (Replay Attack)
-  req.session.currentChallenge = null;
-  req.session.challengeCreatedAt = null;
-  const registeringUserId = req.session.registeringUserId;
-  req.session.registeringUserId = null;
-  req.session.registeringUsername = null;
 
   try {
     // Nhờ chuyên gia chấm điểm xem lời giải có khớp không
@@ -335,14 +383,11 @@ router.post('/register-verify', async (req, res) => {
     }
 
     // BẢO MẬT (C2): Khóa quyền khởi tạo Admin nếu chưa qua bước xác thực token hợp lệ
-    if (username.toLowerCase() === 'admin') {
-      if (!req.session.adminSetupOk) {
-        return res.status(403).json({
-          verified: false,
-          error: 'Chưa được cấp quyền cài đặt tài khoản Quản trị viên!'
-        });
-      }
-      req.session.adminSetupOk = false;
+    if (isAdminUsername(username) && !adminSetupOk) {
+      return res.status(403).json({
+        verified: false,
+        error: 'Chưa được cấp quyền cài đặt tài khoản Quản trị viên!'
+      });
     }
 
     // Chỉ tạo người dùng chính thức vào DB khi đã quét vân tay thành công!
@@ -350,14 +395,14 @@ router.post('/register-verify', async (req, res) => {
     let user = findUserByUsername(username);
     if (user) {
       // Trường hợp đặc biệt: Khởi tạo Passkey lần đầu cho tài khoản Admin đã seed (khi chưa có Passkey)
-      if (user.username.toLowerCase() === 'admin' && user.role === 'admin' && (!user.credentials || user.credentials.length === 0)) {
+      if (isInitialAdminSetup(user)) {
         addCredentialToUser(user.username, {
           id: credential.id,
           publicKey: credential.publicKey,
           counter: credential.counter,
           transports: credential.transports || [],
         });
-        console.log('🛡️ [ADMIN] Khởi tạo Passkey ban đầu cho Quản trị viên thành công!');
+        debugLog('🛡️ [ADMIN] Khởi tạo Passkey ban đầu cho Quản trị viên thành công!');
         return res.json({
           verified: true,
           message: 'Khởi tạo Passkey Admin thành công! Vui lòng bấm Đăng nhập.'
@@ -371,8 +416,7 @@ router.post('/register-verify', async (req, res) => {
     }
 
     // BẢO MẬT: Chặn gán passkey cho các tài khoản hệ thống bảo lưu khác
-    const OTHER_RESERVED = ['administrator', 'root', 'system'];
-    if (OTHER_RESERVED.includes(username.toLowerCase())) {
+    if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
       return res.status(400).json({
         verified: false,
         error: 'Tên tài khoản này được bảo lưu cho quản trị hệ thống, không thể đăng ký mới!'
@@ -388,10 +432,9 @@ router.post('/register-verify', async (req, res) => {
     });
 
 
-    console.log('==========================================');
-    console.log('[ĐĂNG KÝ] Lưu Passkey thành công!');
-    console.log('[ĐĂNG KÝ] Credential ID:', credential.id);
-    console.log('==========================================');
+    debugLog('==========================================');
+    debugLog('[ĐĂNG KÝ] Lưu Passkey thành công!');
+    debugLog('==========================================');
 
     return res.json({
       verified: true,
@@ -406,7 +449,7 @@ router.post('/register-verify', async (req, res) => {
 
     return res.status(400).json({
       verified: false,
-      error: error.message || 'Xác thực Passkey thất bại.'
+      error: getSafeErrorMessage(error, 'Xác thực Passkey thất bại.')
     });
   }
 });
@@ -418,7 +461,7 @@ router.post('/register-verify', async (req, res) => {
 
 // 3. API Tạo Challenge Đăng nhập (Hỗ trợ cả có Username lẫn Usernameless 1-chạm)
 router.post('/login-options', async (req, res) => {
-  const rawUsername = req.body.username;
+  const rawUsername = req.body?.username;
   const isUsernameless = !rawUsername || typeof rawUsername !== 'string' || rawUsername.trim() === '';
 
   let user = null;
@@ -440,12 +483,12 @@ router.post('/login-options', async (req, res) => {
       });
     }
 
-    userCredentials = user.credentials || [];
-    if (userCredentials.length === 0) {
+    if (!hasRegisteredPasskey(user)) {
       return res.status(400).json({
         error: 'Tài khoản này chưa cài đặt sinh trắc học!'
       });
     }
+    userCredentials = user.credentials;
   }
 
   try {
@@ -489,7 +532,7 @@ router.post('/login-options', async (req, res) => {
 
 // 4. API Xác thực Đăng nhập (Chấm điểm - Hỗ trợ cả 2 luồng)
 router.post('/login-verify', async (req, res) => {
-  const { response, username: rawUsername } = req.body;
+  const { response, username: rawUsername } = req.body ?? {};
 
   // PHÒNG CHỐNG CRASH TYPEERROR: Kiểm tra chặt chẽ object response trước khi truy xuất response.id
   if (!response || typeof response !== 'object' || !response.id) {
@@ -498,6 +541,14 @@ router.post('/login-verify', async (req, res) => {
       error: 'Dữ liệu chữ ký sinh trắc học không hợp lệ hoặc bị thiếu!'
     });
   }
+
+  // Lấy và hủy ngay lập tức thông tin Challenge trong Session (Chống Replay Attack)
+  const expectedChallenge = req.session.currentChallenge;
+  const challengeCreatedAt = req.session.challengeCreatedAt;
+  const sessionLoginUsername = req.session.loginUsername;
+  req.session.currentChallenge = null;
+  req.session.challengeCreatedAt = null;
+  req.session.loginUsername = null;
 
   let user = null;
   const isUsernameless = !rawUsername || typeof rawUsername !== 'string' || rawUsername.trim() === '';
@@ -508,6 +559,14 @@ router.post('/login-verify', async (req, res) => {
       return res.status(400).json({
         verified: false,
         error: check.error
+      });
+    }
+    // Phòng thủ chiều sâu: Đảm bảo tính nhất quán phiên khi đăng nhập có username.
+    // (Khi đăng nhập 1-chạm usernameless, sessionLoginUsername là null nên bỏ qua kiểm tra này)
+    if (sessionLoginUsername && sessionLoginUsername.toLowerCase() !== check.username.toLowerCase()) {
+      return res.status(400).json({
+        verified: false,
+        error: 'Tên tài khoản xác thực không khớp với phiên yêu cầu Challenge!'
       });
     }
     user = findUserByUsername(check.username);
@@ -530,8 +589,6 @@ router.post('/login-verify', async (req, res) => {
   debugLog('[ĐĂNG NHẬP] Username:', user.username);
   debugLog('==========================================');
 
-  const expectedChallenge = req.session.currentChallenge;
-
   if (!expectedChallenge) {
     return res.status(400).json({
       verified: false,
@@ -540,21 +597,14 @@ router.post('/login-verify', async (req, res) => {
   }
 
   // BẢO MẬT (M1): Kiểm tra thời hạn Challenge đăng nhập (2 phút)
-  if (isChallengeExpired(req.session.challengeCreatedAt)) {
-    req.session.currentChallenge = null;
-    req.session.challengeCreatedAt = null;
+  if (isChallengeExpired(challengeCreatedAt)) {
     return res.status(400).json({
       verified: false,
       error: 'Phiên đăng nhập đã quá hạn (2 phút). Vui lòng thử lại!'
     });
   }
 
-  // Hủy Challenge ngay lập tức để chống Replay Attack
-  req.session.currentChallenge = null;
-  req.session.challengeCreatedAt = null;
-
   const userCredentials = user.credentials || [];
-
   const currentDevice = userCredentials.find(
     device => device.id === response.id
   );
@@ -581,7 +631,7 @@ router.post('/login-verify', async (req, res) => {
       requireUserVerification: true,
     });
 
-    console.log('[ĐĂNG NHẬP] Kết quả xác thực:', verification.verified);
+    debugLog('[ĐĂNG NHẬP] Kết quả xác thực:', verification.verified);
 
     if (!verification.verified) {
       return res.status(400).json({
@@ -608,10 +658,10 @@ router.post('/login-verify', async (req, res) => {
       // Phân quyền chuẩn xác theo role đã lưu trong cơ sở dữ liệu
       req.session.role = user.role === 'admin' ? 'admin' : 'student';
 
-      console.log('==========================================');
-      console.log('[ĐĂNG NHẬP] Đăng nhập thành công!');
-      console.log(`[ĐĂNG NHẬP] User: ${user.username} | Role: ${req.session.role}`);
-      console.log('==========================================');
+      debugLog('==========================================');
+      debugLog('[ĐĂNG NHẬP] Đăng nhập thành công!');
+      debugLog(`[ĐĂNG NHẬP] User: ${user.username} | Role: ${req.session.role}`);
+      debugLog('==========================================');
 
       return res.json({
         verified: true,
@@ -631,7 +681,7 @@ router.post('/login-verify', async (req, res) => {
 
     return res.status(400).json({
       verified: false,
-      error: error.message || 'Xác thực đăng nhập thất bại!'
+      error: getSafeErrorMessage(error, 'Xác thực đăng nhập thất bại!')
     });
   }
 });

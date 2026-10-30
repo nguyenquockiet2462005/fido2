@@ -324,21 +324,19 @@ export async function handleStepUpUpdateProfile(profileData, logCallback) {
             throw new Error(verifyJSON?.error || "Xác thực danh tính thất bại. Không thể cập nhật hồ sơ!");
         }
     } catch (error) {
-        let customMsg = error.message;
-        if (
+        let customMsg = error.message || '';
+        const isCancelled =
             error.name === 'NotAllowedError' ||
             customMsg.includes('timed out') ||
-            customMsg.includes('not allowed')
-        ) {
-            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
-        }
+            customMsg.includes('not allowed');
 
-        if (customMsg.includes("Đã hủy")) {
+        if (isCancelled) {
+            customMsg = "Đã hủy thao tác xác thực sinh trắc học.";
             log("ℹ️ " + customMsg);
         } else {
             log("❌ " + customMsg);
         }
-        return { success: false, error: customMsg };
+        return { success: false, cancelled: isCancelled, error: customMsg };
     }
 }
 

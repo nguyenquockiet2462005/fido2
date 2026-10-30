@@ -10,11 +10,6 @@
         rel="stylesheet">
     <link rel="stylesheet" href="css/workspace.css">
     <script src="/vendor/simplewebauthn-browser.min.js"></script>
-    <script>
-        if (!window.SimpleWebAuthnBrowser) {
-            document.write('<script src="https://unpkg.com/@simplewebauthn/browser@14.0.0/dist/bundle/index.umd.min.js"><\/script>');
-        }
-    </script>
 </head>
 
 <body>
@@ -39,7 +34,7 @@
                         class="ws-avatar-mini">
                     <span id="ws-fullname">Đang tải...</span>
                 </div>
-                <button class="ws-btn-logout" onclick="logout()">
+                <button type="button" id="btn-logout" class="ws-btn-logout">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
                         <path
                             d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
@@ -105,11 +100,11 @@
                                 <span class="ws-info-label">Ngày sinh</span>
                                 <span id="val-dob" class="ws-info-value">--/--/----</span>
                             </div>
-                            <div class="ws-info-row" id="row-faculty" style="display:none;">
+                            <div class="ws-info-row hidden" id="row-faculty">
                                 <span class="ws-info-label">Khoa</span>
                                 <span id="val-faculty" class="ws-info-value">--</span>
                             </div>
-                            <div class="ws-info-row" id="row-year" style="display:none;">
+                            <div class="ws-info-row hidden" id="row-year">
                                 <span class="ws-info-label">Khóa</span>
                                 <span id="val-year" class="ws-info-value">--</span>
                             </div>
@@ -133,11 +128,11 @@
                             <span>Chỉnh Sửa Hồ Sơ</span>
                         </button>
 
-                        <div id="ws-scan-progress" class="ws-scan-progress" style="display: none;"></div>
+                        <div id="ws-scan-progress" class="ws-scan-progress hidden"></div>
                     </div>
 
-                    <!-- CỘT PHẢI: THÔNG BÁO + BẢO MẬT -->
-                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                    <!-- CỘT PHẢI: THÔNG BÁO -->
+                    <div class="ws-right-col">
                         <!-- THẺ THÔNG BÁO BẢO MẬT -->
                         <div class="ws-card">
                             <div class="ws-card-header">
@@ -259,8 +254,7 @@
             </div>
             <div class="ws-modal-footer">
                 <button type="button" class="ws-btn-secondary" id="btn-cancel-edit">Hủy</button>
-                <button type="button" class="ws-btn-primary" id="btn-save-stepup"
-                    style="width: auto; padding: 10px 20px;">
+                <button type="button" class="ws-btn-primary ws-btn-save" id="btn-save-stepup">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                         <path
                             d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72c-.1 0-.2-.03-.29-.09-.23-.16-.28-.47-.12-.7.99-1.4 2.25-2.5 3.75-3.27C9.9 4.04 12 4.04 14.1 4.7c.26.08.41.36.33.62-.08.26-.36.41-.62.33-1.85-.58-3.7-.58-5.46.32-1.33.68-2.45 1.66-3.33 2.91-.1.15-.27.24-.44.24z" />
@@ -271,208 +265,7 @@
         </div>
     </div>
 
-    <script type="module">
-        import { handleStepUpUpdateProfile } from './js/webauthn.js';
-
-        const btnOpenEdit = document.getElementById('btn-open-edit');
-        const modalEdit = document.getElementById('modal-edit-profile');
-        const btnCloseEdit = document.getElementById('btn-close-edit');
-        const btnCancelEdit = document.getElementById('btn-cancel-edit');
-        const btnSaveStepUp = document.getElementById('btn-save-stepup');
-        const scanProgress = document.getElementById('ws-scan-progress');
-
-        const editFullname = document.getElementById('edit-fullname');
-        const editMssv = document.getElementById('edit-mssv');
-        const editDob = document.getElementById('edit-dob');
-        const editFaculty = document.getElementById('edit-faculty');
-        const editYear = document.getElementById('edit-year');
-
-        let currentUser = null;
-
-        function showProgress(msg, isError = false) {
-            if (!scanProgress) return;
-            scanProgress.style.display = 'flex';
-            if (isError) {
-                scanProgress.classList.add('error');
-            } else {
-                scanProgress.classList.remove('error');
-            }
-            scanProgress.innerText = msg;
-        }
-
-        function hideProgress(delay = 4000) {
-            if (!scanProgress) return;
-            setTimeout(() => {
-                scanProgress.style.display = 'none';
-            }, delay);
-        }
-
-        // Tiện ích: Chuyển đổi 'dd/mm/yyyy' hoặc 'yyyy-mm-dd' sang 'yyyy-mm-dd' cho thẻ <input type="date">
-        function toDateInputValue(dobStr) {
-            if (!dobStr || typeof dobStr !== 'string') return '';
-            dobStr = dobStr.trim();
-            if (dobStr.includes('/')) {
-                const parts = dobStr.split('/');
-                if (parts.length === 3) {
-                    const day = parts[0].padStart(2, '0');
-                    const month = parts[1].padStart(2, '0');
-                    const year = parts[2];
-                    return `${year}-${month}-${day}`;
-                }
-            }
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dobStr)) {
-                return dobStr;
-            }
-            return '';
-        }
-
-        // Tiện ích: Chuyển đổi 'yyyy-mm-dd' từ <input type="date"> sang 'dd/mm/yyyy' hiển thị chuẩn VN
-        function fromDateInputValue(ymdStr) {
-            if (!ymdStr || typeof ymdStr !== 'string') return '';
-            ymdStr = ymdStr.trim();
-            if (ymdStr.includes('-')) {
-                const parts = ymdStr.split('-');
-                if (parts.length === 3) {
-                    const year = parts[0];
-                    const month = parts[1].padStart(2, '0');
-                    const day = parts[2].padStart(2, '0');
-                    return `${day}/${month}/${year}`;
-                }
-            }
-            return ymdStr;
-        }
-
-        function openModal() {
-            if (currentUser) {
-                editFullname.value = currentUser.profile?.fullName || currentUser.hoTen || '';
-                editMssv.value = currentUser.profile?.studentId || '(Chưa cấp)';
-                editDob.value = toDateInputValue(currentUser.profile?.dob || currentUser.ngaySinh || '');
-                editFaculty.value = currentUser.profile?.faculty || '';
-                editYear.value = currentUser.profile?.academicYear || '';
-            }
-            modalEdit.classList.add('active');
-            editFullname.focus();
-        }
-
-        function closeModal() {
-            modalEdit.classList.remove('active');
-        }
-
-        if (btnOpenEdit) btnOpenEdit.addEventListener('click', openModal);
-        if (btnCloseEdit) btnCloseEdit.addEventListener('click', closeModal);
-        if (btnCancelEdit) btnCancelEdit.addEventListener('click', closeModal);
-
-        // Đóng modal khi bấm ra ngoài phần nền xám
-        modalEdit.addEventListener('click', (e) => {
-            if (e.target === modalEdit) closeModal();
-        });
-
-        // Tải dữ liệu hồ sơ từ backend
-        async function loadData() {
-            try {
-                const res = await fetch('/api/user/me');
-                if (!res.ok) {
-                    window.location.href = 'index.html';
-                    return;
-                }
-                const u = await res.json();
-                currentUser = u;
-
-                // Nếu là admin, tự động chuyển về dashboard quản trị
-                if (u.role === 'admin') {
-                    window.location.href = 'dashboard.html';
-                    return;
-                }
-
-                // Cập nhật các trường thông tin hiển thị
-                const displayName = u.hoTen || u.username;
-                document.getElementById('ws-fullname').innerText = displayName;
-                const shortName = displayName.split(' ').slice(-2).join(' ');
-                document.getElementById('ws-shortname').innerText = shortName;
-                document.getElementById('ws-username').innerText = u.username;
-                document.getElementById('val-name').innerText = displayName;
-                document.getElementById('val-mssv').innerText = u.profile?.studentId || '(Chưa cấp)';
-                document.getElementById('val-dob').innerText = u.profile?.dob || u.ngaySinh || '--/--/----';
-                document.getElementById('val-creds-count').innerText = `${u.credentialsCount || 0} khóa Passkey`;
-
-                // Avatar
-                const avatarUrl = u.profile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.username}`;
-                document.getElementById('ws-avatar').src = avatarUrl;
-                document.getElementById('ws-profile-avatar').src = avatarUrl;
-
-                // Khoa và Khóa học
-                if (u.profile?.faculty) {
-                    document.getElementById('val-faculty').innerText = u.profile.faculty;
-                    document.getElementById('row-faculty').style.display = 'flex';
-                } else {
-                    document.getElementById('row-faculty').style.display = 'none';
-                }
-                if (u.profile?.academicYear) {
-                    document.getElementById('val-year').innerText = u.profile.academicYear;
-                    document.getElementById('row-year').style.display = 'flex';
-                } else {
-                    document.getElementById('row-year').style.display = 'none';
-                }
-
-            } catch (err) {
-                console.error('Lỗi tải dữ liệu:', err);
-                window.location.href = 'index.html';
-            }
-        }
-
-        // Sự kiện: Bấm Lưu Thay Đổi -> Kích hoạt FIDO2 Step-Up Authentication
-        if (btnSaveStepUp) {
-            btnSaveStepUp.addEventListener('click', async () => {
-                const profileData = {
-                    fullName: editFullname.value.trim(),
-                    dob: fromDateInputValue(editDob.value),
-                    faculty: editFaculty.value.trim(),
-                    academicYear: editYear.value.trim(),
-                };
-
-                if (!profileData.fullName) {
-                    alert('Vui lòng nhập Họ và Tên sinh viên!');
-                    editFullname.focus();
-                    return;
-                }
-
-                btnSaveStepUp.disabled = true;
-                const origText = btnSaveStepUp.innerHTML;
-                btnSaveStepUp.innerText = 'Đang chờ quét vân tay...';
-                closeModal();
-                showProgress('Đang mở cảm biến...');
-
-                try {
-                    const result = await handleStepUpUpdateProfile(profileData, msg => showProgress(msg));
-                    if (result && result.success) {
-                        showProgress('Cập nhật thành công!');
-                        hideProgress(3000);
-                        await loadData();
-                    } else {
-                        const errMsg = result?.error || 'Xác thực thất bại.';
-                        const isCancel = errMsg.includes('Đã hủy');
-                        showProgress(isCancel ? 'ℹ️ ' + errMsg : '❌ ' + errMsg, !isCancel);
-                        hideProgress(4000);
-                    }
-                } catch (err) {
-                    showProgress('❌ ' + err.message, true);
-                    hideProgress(4000);
-                } finally {
-                    btnSaveStepUp.disabled = false;
-                    btnSaveStepUp.innerHTML = origText;
-                }
-            });
-        }
-
-        // Đăng xuất
-        async function logout() {
-            await fetch('/api/auth/logout', { method: 'POST' });
-            window.location.href = 'index.html';
-        }
-        window.logout = logout;
-
-        loadData();
-    </script>
+    <script type="module" src="js/workspace.js"></script>
 </body>
 
 </html>

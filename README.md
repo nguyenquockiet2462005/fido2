@@ -17,7 +17,7 @@ Dự án hiện thực một ứng dụng web mô phỏng cổng thông tin và 
 7. [Biến môi trường](#7-biến-môi-trường)
 8. [Cài đặt và vận hành](#8-cài-đặt-và-vận-hành)
 9. [Kịch bản kiểm thử và demo](#9-kịch-bản-kiểm-thử-và-demo)
-10. [Phân công thành viên](#10-phân-công-thành-viên)
+10. [Thành viên đóng góp](#10-thành-viên-đóng-góp)
 11. [Quy trình làm việc với Git](#11-quy-trình-làm-việc-với-git)
 12. [Hạn chế và hướng phát triển](#12-hạn-chế-và-hướng-phát-triển)
 13. [Tài liệu tham khảo](#13-tài-liệu-tham-khảo)
@@ -38,10 +38,9 @@ Dự án hiện thực một ứng dụng web mô phỏng cổng thông tin và 
 | :--- | :--- |
 | **Xác thực** | Đăng ký Passkey, đăng nhập có username, đăng nhập nhanh không cần username (discoverable credential), đăng xuất |
 | **Phân quyền** | Hai vai trò: **Admin** chuyển hướng vào `dashboard.html`, **Sinh viên** chuyển hướng vào `workspace.html` |
-| **Không gian sinh viên** | Thẻ sinh viên điện tử HUTECH, xem hồ sơ, xem số lượng khóa Passkey đã liên kết, cập nhật hồ sơ qua Step-Up |
+| **Không gian sinh viên** | Xem hồ sơ cá nhân, xem số lượng khóa Passkey đã liên kết, cập nhật hồ sơ qua Step-Up Authentication |
 | **Quản trị (Admin)** | Xem danh sách tài khoản sinh viên, xem số liệu trực quan qua biểu đồ Chart.js (quyền truy cập kiểm soát ở API) |
 | **Step-Up Authentication** | Yêu cầu xác thực lại sinh trắc học bằng Passkey khi chỉnh sửa các trường thông tin cá nhân |
-| **Trình diễn học thuật** | Khung Inspector hiển thị trực quan các gói tin `clientDataJSON`, `attestationObject`, `authenticatorData` |
 
 ---
 
@@ -54,7 +53,7 @@ Dự án hiện thực một ứng dụng web mô phỏng cổng thông tin và 
 | **Nhân bản thiết bị xác thực** | Signature counter | Server từ chối khi `counter` nhận được nhỏ hơn hoặc bằng giá trị đã lưu. *(Lưu ý: nhiều Passkey đồng bộ qua iCloud Keychain/Google Password Manager giữ counter = 0 nên cơ chế này không áp dụng cho khóa đồng bộ).* | `routes/auth.js`, `db.js` |
 | **Rò rỉ cơ sở dữ liệu** | Zero-Shared-Secret | Server chỉ lưu `credentialID`, `publicKey` và `counter`. Hoàn toàn không có mật khẩu hay khóa riêng. Dữ liệu hồ sơ (họ tên, ngày sinh, MSSV) vẫn là dữ liệu cá nhân cần bảo vệ. | `db.js` |
 | **Đánh cắp khóa riêng** | Hardware Isolation | Khóa riêng tư được sinh và bảo vệ trong phần cứng an toàn (Secure Enclave, TPM, Security Key) và không bao giờ rời khỏi thiết bị. | Authenticator phần cứng |
-| **Chiếm phiên làm việc** | Step-Up Authentication | Giảm thiểu rủi ro: kẻ chiếm được Cookie phiên vẫn đọc được hồ sơ, nhưng không thể sửa đổi thông tin nhạy cảm nếu thiếu thiết bị xác thực của người dùng. | `routes/user.js`, `workspace.html` |
+| **Chiếm phiên làm việc** | Step-Up Authentication | Giảm thiểu rủi ro: kẻ chiếm được Cookie phiên vẫn đọc được hồ sơ, nhưng không thể sửa đổi thông tin nhạy cảm nếu thiếu thiết bị xác thực của người dùng. | `routes/user.js`, `public/js/workspace.js` |
 | **Spam challenge, dò username** | Rate Limiting | Giới hạn 40 yêu cầu mỗi 5 phút trên các route xác thực (`authLimiter`), kết hợp `trust proxy` để nhận diện đúng IP phía sau reverse proxy. | `server.js` |
 | **Tấn công đo thời gian (Timing)** | CWE-208 | So sánh mã thiết lập Admin (`ADMIN_SETUP_TOKEN`) bằng `crypto.timingSafeEqual` sau khi chuẩn hóa kiểm tra độ dài. | `routes/auth.js` |
 | **Cố định phiên (Session Fixation)** | CWE-384 | Tái tạo lại Session ID bằng `session.regenerate()` ngay sau khi người dùng xác thực Passkey thành công. | `routes/auth.js` |
@@ -194,24 +193,22 @@ Dữ liệu tài khoản được quản lý trong bộ nhớ RAM phục vụ tr
 fido2/
 ├── server.js              # Khởi tạo Express, session, MongoStore, rate limit, proxy
 ├── db.js                  # Cơ chế CSDL (RAM cache, fallback users.json & sync MongoDB Atlas)
-├── reset-db.js            # Script dọn dẹp sạch CSDL cục bộ và Cloud
 ├── routes/
 │   ├── auth.js            # API FIDO2: đăng ký, đăng nhập, 1-chạm, kiểm tra an ninh
 │   └── user.js            # API hồ sơ sinh viên, Step-Up Authentication
 ├── public/
 │   ├── index.html         # Cổng xác thực Passkey tập trung
 │   ├── dashboard.html     # Bảng điều khiển Quản trị viên (Admin Dashboard)
-│   ├── workspace.html     # Không gian hồ sơ & thẻ sinh viên điện tử HUTECH
+│   ├── workspace.html     # Không gian làm việc và quản lý hồ sơ sinh viên
 │   ├── css/
 │   │   ├── style.css      # Giao diện cổng đăng nhập (Dark Glassmorphism)
 │   │   ├── dashboard.css  # Giao diện trang Admin
 │   │   └── workspace.css  # Giao diện Workspace sinh viên
 │   └── js/
 │       ├── webauthn.js    # Client WebAuthn: Register, Login, Quick Login, Step-Up
-│       ├── ui.js          # Xử lý sự kiện trang chủ và khung Inspector
-│       └── dashboard.js   # Quản lý biểu đồ Chart.js và nạp danh sách người dùng
-├── tests/
-│   └── security.test.mjs  # Bộ kiểm thử an ninh tự động
+│       ├── ui.js          # Xử lý sự kiện trang đăng nhập/đăng ký
+│       ├── workspace.js   # Xử lý hiển thị hồ sơ và cập nhật Step-Up cho sinh viên
+│       └── dashboard.js   # Quản lý biểu đồ Chart.js và danh sách người dùng
 ├── data/
 │   └── users.json         # File cache cục bộ (bị loại trừ bởi .gitignore)
 ├── .env.example           # File mẫu khai báo biến môi trường
@@ -223,7 +220,7 @@ fido2/
 
 ## 6. API endpoints
 
-Các endpoint xác thực được thiết kế theo kiểu **RPC (Remote Procedure Call)** qua HTTP POST, tương ứng với quy trình hai bước (`options` $\rightarrow$ `verify`) của chuẩn WebAuthn. 
+Các endpoint xác thực được thiết kế theo kiểu **RPC (Remote Procedure Call)** qua HTTP POST, tương ứng với quy trình hai bước (`options` $\rightarrow$ `verify`) của chuẩn WebAuthn.
 
 Hệ thống có **13 endpoints** (gồm 11 endpoints nghiệp vụ chính và 2 endpoints kiểm thử chỉ kích hoạt khi `NODE_ENV !== 'production'`):
 
@@ -235,7 +232,7 @@ Hệ thống có **13 endpoints** (gồm 11 endpoints nghiệp vụ chính và 2
 | **POST** | `/api/auth/login-verify` | Challenge trong session | Xác minh chữ ký assertion, tạo phiên và cập nhật counter |
 | **POST** | `/api/auth/logout` | Đã đăng nhập | Hủy phiên làm việc và xóa cookie `connect.sid` |
 | **GET** | `/api/user/profile` | Đã đăng nhập | Xem thông tin hồ sơ chi tiết của người dùng |
-| **GET** | `/api/user/me` | Đã đăng nhập | Lấy thông tin rút gọn phục vụ Workspace sinh viên |
+| **GET** | `/api/user/me` | Đã đăng nhập | Lấy thông tin hồ sơ phục vụ Workspace sinh viên |
 | **POST** | `/api/user/profile/step-up-options` | Đã đăng nhập | Tạo challenge xác thực bước 2 (Step-Up) |
 | **POST** | `/api/user/profile/step-up-update` | Đã đăng nhập | Xác minh sinh trắc học và cập nhật hồ sơ cá nhân |
 | **GET** | `/api/users` | **Vai trò Admin** | Lấy danh sách toàn bộ người dùng phục vụ Dashboard |
@@ -287,29 +284,12 @@ cp .env.example .env
 # 4. Khởi chạy máy chủ
 npm start        # Khởi chạy chế độ thông thường
 npm run dev      # Khởi chạy chế độ phát triển (tự reload khi sửa mã nguồn)
-
-# 5. Chạy bộ kiểm thử an ninh tự động
-npm test
 ```
 
 Truy cập ứng dụng tại địa chỉ: `http://localhost:3000` (hoặc cổng in ra trên terminal).
 
 > [!IMPORTANT]
 > Chuẩn W3C WebAuthn bắt buộc chạy qua giao thức bảo mật `https://` hoặc tên miền cục bộ `localhost` / `127.0.0.1`. Truy cập qua địa chỉ IP mạng nội bộ (ví dụ: `http://192.168.x.x:3000`) sẽ bị trình duyệt vô hiệu hóa WebAuthn API.
-
-**Dọn dẹp và đặt lại cơ sở dữ liệu**
-
-```bash
-npm run reset-db            # Yêu cầu xác nhận trước khi thực hiện
-npm run reset-db -- --yes   # Thực hiện ngay không qua bước xác nhận
-```
-
-> [!WARNING]
-> Lệnh `reset-db` sẽ xóa sạch hoàn toàn dữ liệu ở **3 nơi**:
-> 1. Làm trống file cục bộ: ghi `[]` vào `data/users.json`.
-> 2. Xóa sạch toàn bộ tài khoản trong collection `users` trên MongoDB Atlas.
-> 3. Xóa sạch toàn bộ phiên đăng nhập trong collection `sessions` trên MongoDB Atlas.
-> Dữ liệu sau khi xóa trên MongoDB Atlas **không thể khôi phục**.
 
 ---
 
@@ -340,26 +320,17 @@ npm run reset-db -- --yes   # Thực hiện ngay không qua bước xác nhận
 * **Kịch bản 7: Chống tấn công giả mạo tên miền (Phishing)**
   1. Thử thay đổi `ORIGIN` trong `.env` khác với địa chỉ đang truy cập và thực hiện xác thực.
   2. Bước kiểm tra origin trên server thất bại, minh họa cơ chế phòng chống phishing của FIDO2.
-* **Kịch bản 8: Bộ kiểm thử an ninh tự động (`npm test`)**
-  Bộ test tại `tests/security.test.mjs` tự động kiểm tra 7 lớp phòng thủ:
-  1. Nạp và kiểm tra biến cấu hình an ninh `ADMIN_SETUP_TOKEN`.
-  2. Kiểm tra tính an toàn của hàm so sánh thời gian thực `safeEqual` (CWE-208).
-  3. Kiểm tra tính hợp lệ của thời gian sống Challenge (TTL 2 phút).
-  4. Kiểm tra khóa endpoint đăng ký Admin khi tài khoản đã liên kết Passkey (HTTP 400).
-  5. Kiểm tra mã thiết lập Admin ban đầu (thiếu/sai token trả 403, đúng token trả 200).
-  6. Kiểm tra chống tráo đổi định danh phiên (Mismatched username) và chống ghi đè tài khoản đã tồn tại (HTTP 400).
-  7. Kiểm tra từ chối yêu cầu Step-Up khi challenge không hợp lệ hoặc quá hạn (HTTP 400/401).
 
 ---
 
-## 10. Phân công thành viên
+## 10. Thành viên đóng góp
 
-| Họ và tên | MSSV | Vai trò | File phụ trách |
-| :--- | :--- | :--- | :--- |
-| **Quốc Kiệt** | (điền MSSV) | Nhóm trưởng, Tech Lead | `server.js`, `db.js`, `reset-db.js`, `tests/security.test.mjs`, cấu hình an ninh, review Pull Request, báo cáo |
-| **Khoa** | (điền MSSV) | Backend Developer | `routes/auth.js` (FIDO2 Core), `routes/user.js` (Step-Up API & Profile) |
-| **Huy** | (điền MSSV) | Frontend FIDO2 | `public/js/webauthn.js` (Tích hợp WebAuthn API, luồng 1-chạm & Step-Up) |
-| **Đạt** | (điền MSSV) | Frontend UI/UX | `public/index.html`, `public/dashboard.html`, `public/workspace.html`, các file CSS và `public/js/ui.js`, `public/js/dashboard.js` |
+| STT | Họ và tên | MSSV |
+| :-: | :--- | :--- |
+| 1 | **Quốc Kiệt** | (điền MSSV) |
+| 2 | **Khoa** | (điền MSSV) |
+| 3 | **Huy** | (điền MSSV) |
+| 4 | **Đạt** | (điền MSSV) |
 
 ---
 
@@ -383,7 +354,7 @@ git commit -m "feat: mo ta ngan gon thay doi"
 git push origin feature/<ten-chuc-nang>
 ```
 
-Sau khi hoàn tất, mở Pull Request trên GitHub vào `main`. Nhóm trưởng tiến hành kiểm tra, chạy bộ test tự động (`npm test`), thảo luận mã nguồn trước khi thực hiện gộp (Merge).
+Sau khi hoàn tất, mở Pull Request trên GitHub vào `main`. Nhóm trưởng tiến hành kiểm tra và thảo luận mã nguồn trước khi thực hiện gộp (Merge).
 
 **Quy ước chung**
 
