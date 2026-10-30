@@ -327,10 +327,10 @@ Truy cập ứng dụng tại địa chỉ: `http://localhost:3000` (hoặc cổ
 
 | STT | Họ và tên | MSSV |
 | :-: | :--- | :--- |
-| 1 | **Quốc Kiệt** | (điền MSSV) |
-| 2 | **Khoa** | (điền MSSV) |
-| 3 | **Huy** | (điền MSSV) |
-| 4 | **Đạt** | (điền MSSV) |
+| 1 | **Nguyễn Quốc Kiệt** | 24800612252 |
+| 2 | **Nguyễn Trình Khoa** | 24800600488 |
+| 3 | **Trương Nhựt Huy** | 24800600403 |
+| 4 | **Ngô Thành Đạt** | 24800600203 |
 
 ---
 
