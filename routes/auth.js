@@ -136,12 +136,14 @@ function validateUsername(rawUsername) {
 
 /**
  * So sánh chuỗi an toàn chống tấn công đo lường thời gian (Timing Attack / CWE-208)
+ * Băm SHA-256 cả hai vế trước khi so sánh: hai digest luôn dài 32 byte nên
+ * crypto.timingSafeEqual không bao giờ phải trả về sớm vì khác độ dài,
+ * thời gian so sánh không phụ thuộc vào nội dung hay độ dài của token.
  */
 export function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  if (x.length !== y.length) return false;
+  const x = crypto.createHash('sha256').update(a).digest();
+  const y = crypto.createHash('sha256').update(b).digest();
   return crypto.timingSafeEqual(x, y);
 }
 
