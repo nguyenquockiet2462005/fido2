@@ -71,90 +71,119 @@ Hệ thống gồm ba thành phần theo đặc tả FIDO2:
 
 ### 3.1. Luồng đăng ký Passkey
 
+Quy trình đăng ký áp dụng cơ chế **Khởi tạo trì hoãn (Deferred Creation)**: Máy chủ chỉ tạo mã người dùng tạm trong Session và chỉ ghi tài khoản chính thức vào CSDL sau khi xác minh thành công chữ ký sinh trắc học, ngăn ngừa hoàn toàn nguy cơ sinh "tài khoản rác" (Ghost Account) nếu người dùng hủy giữa chừng.
+
+1. **Khởi tạo tùy chọn (Options Request):** Client gửi `POST /api/auth/register-options` kèm `username`. Máy chủ kiểm tra cú pháp regex, kiểm tra trùng lặp trong CSDL, sinh định danh người dùng `userId` ngẫu nhiên 64-byte CSPRNG (`crypto.randomBytes(64)`) bảo vệ quyền riêng tư (không chứa PII theo W3C §5.4.3), và sinh `challenge` ngẫu nhiên (thời gian sống TTL 2 phút).
+2. **Cấu hình tham số bảo mật cốt lõi:**
+   - `userVerification: 'required'`: Bắt buộc xác minh chính chủ qua sinh trắc học (Touch ID, Face ID, Windows Hello) hoặc PIN; cờ UV (User Verified) phải mang giá trị `true`.
+   - `residentKey: 'preferred'`: Ưu tiên tạo Khóa lưu trú (Discoverable Credential) trực tiếp trong chip an toàn để phục vụ đăng nhập nhanh 1-chạm (Usernameless).
+   - `attestationType: 'none'`: Tối ưu kích thước gói tin mạng và bảo vệ thông tin riêng tư phần cứng.
+   - `pubKeyCredParams`: Ưu tiên thuật toán ES256 (ECDSA P-256, COSE alg `-7`) và RS256 (`-257`).
+3. **Thực thi phần cứng (Hardware Ceremony):** Trình duyệt gọi `@simplewebauthn/browser` (`startRegistration`) tương tác với WebAuthn API `navigator.credentials.create()`. Chip bảo mật (Secure Enclave / TPM) kích hoạt cảm biến sinh trắc học, tạo cặp khóa bất đối xứng, lưu Khóa bí mật (Private Key) trong phần cứng và trả về `attestationObject` cùng `clientDataJSON`.
+4. **Xác minh & Lưu trữ (Verification & Persistence):** Client gửi phản hồi lên `POST /api/auth/register-verify`.
+   - **Chốt chặn an ninh:** Thu hồi Challenge ngay lập tức (`req.session.currentChallenge = null` chống Replay Attack), kiểm tra `req.session.registeringUsername === req.body.username` (chống tráo đổi danh tính giữa 2 bước - kịch bản A11/M9), kiểm tra hạn sống TTL (120 giây).
+   - **Xác minh chữ ký số:** Kiểm tra tính toàn vẹn chữ ký, so khớp tuyệt đối `expectedOrigin` và `expectedRPID`, xác nhận cờ UP (User Present) và UV (User Verified).
+   - **Ghi dữ liệu nguyên tử:** Gọi `createUser()` và `addCredentialToUser()`, nén Khóa công khai sang định dạng Base64URL gọn gàng và đồng bộ dữ liệu bền vững.
+
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as Người dùng
+    actor U as Sinh viên (User)
     participant C as Trình duyệt (Client)
-    participant S as Server (RP)
-    participant A as Authenticator
+    participant S as Máy chủ (RP Server)
+    participant A as Chip bảo mật (Authenticator)
 
-    U->>C: Nhập username, chọn Đăng ký
+    U->>C: Nhập tên tài khoản, bấm "Đăng Ký"
     C->>S: POST /api/auth/register-options { username }
-    S->>S: Tạo challenge ngẫu nhiên (TTL 2 phút), lưu vào session
-    S-->>C: PublicKeyCredentialCreationOptions
-    C->>A: navigator.credentials.create()
-    A->>U: Yêu cầu vân tay / khuôn mặt / PIN
-    U-->>A: Xác nhận thành công
-    A->>A: Sinh cặp khóa bất đối xứng
-    A-->>C: attestationObject, clientDataJSON
-    C->>S: POST /api/auth/register-verify { response }
-    S->>S: Kiểm tra challenge, origin, rpID, chữ ký
-    S->>S: Lưu credentialID, publicKey, counter vào CSDL
-    S-->>C: { verified: true }
+    Note over S: Sinh userId 64-byte CSPRNG (ẩn danh, không lộ PII)<br/>Sinh Challenge (TTL 2 phút), lưu tạm vào Session
+    S-->>C: Trả về PublicKeyCredentialCreationOptions (userVerification: 'required')
+    C->>A: navigator.credentials.create({ optionsJSON })
+    A->>U: Bật hộp thoại yêu cầu quét vân tay / Face ID / PIN
+    U-->>A: Xác nhận sinh trắc học thành công
+    Note over A: Sinh cặp khóa ECDSA P-256 mới<br/>Khóa bí mật giữ chặt trong chip an toàn
+    A-->>C: Trả về attestationObject & clientDataJSON
+    C->>S: POST /api/auth/register-verify { response, username }
+    Note over S: 1. Hủy Challenge ngay lập tức (Chống Replay Attack)<br/>2. Đối chiếu sessionUsername === body.username (Chống tráo đổi tài khoản)<br/>3. Kiểm tra chữ ký số, Origin, RP ID, cờ UV<br/>4. Ghi tài khoản & Khóa công khai Base64URL vào CSDL
+    S-->>C: HTTP 200 { verified: true } (Thông báo đăng ký thành công)
 ```
 
 ### 3.2. Luồng đăng nhập Passkey
 
-Hệ thống hỗ trợ hai cách vào luồng đăng nhập:
-1. **Đăng nhập có username**: Server tạo challenge kèm danh sách `allowCredentials` thuộc về tài khoản đó.
-2. **Đăng nhập nhanh không username (Usernameless)**: Server trả về `allowCredentials` rỗng. Trình duyệt mở kho khóa Passkey cục bộ (Discoverable Credentials) để người dùng chọn tài khoản và xác nhận 1-chạm.
+Hệ thống hỗ trợ song song hai hình thức đăng nhập không mật khẩu, kết hợp cơ chế kiểm soát bộ đếm chống nhân bản và phân quyền điều hướng theo vai trò (RBAC):
+
+1. **Hai hình thức xác thực linh hoạt:**
+   - **Đăng nhập định danh (Username-first):** Người dùng nhập `username`, máy chủ truy vấn CSDL để lấy danh sách khóa `allowCredentials` thuộc tài khoản đó. Trình duyệt chỉ cho phép Authenticator ký bằng khóa tương ứng.
+   - **Đăng nhập nhanh 1-chạm (Usernameless / Discoverable Credential):** Người dùng bấm thẳng nút *"Đăng nhập nhanh bằng Passkey"*. Máy chủ gửi về `allowCredentials: []` (mảng rỗng). Trình duyệt tự động mở kho khóa Passkey trong chip phần cứng ứng với `rpID = localhost`. Người dùng chạm vân tay chọn tài khoản, máy chủ tra cứu ngược qua `findUserByCredentialId(response.id)` để xác định danh tính.
+2. **Xác minh chữ ký số & Phát hiện nhân bản phần cứng (Hardware Clone Detection):**
+   - Máy chủ đối chiếu chữ ký assertion bằng Khóa công khai đã lưu trong CSDL.
+   - Kiểm tra bộ đếm `counter`: Giá trị `counter` gửi lên phải lớn hơn giá trị đã lưu trong CSDL (ngoại lệ: cho phép nếu cả hai bằng 0 đối với Passkey đồng bộ đám mây như iCloud Keychain / Google Password Manager). Nếu `counter` giảm hoặc không đổi, máy chủ coi thiết bị là bản sao trái phép và từ chối phiên truy cập.
+3. **Chống cố định phiên (Session Fixation Prevention) & Điều hướng:**
+   - Gọi `req.session.regenerate()` để hủy Session ID cũ và phát hành Cookie `connect.sid` hoàn toàn mới sau khi xác thực thành công.
+   - Gán vai trò (`req.session.role`) trực tiếp ở Backend và điều hướng:
+     - Vai trò `admin` $\rightarrow$ chuyển hướng tới `dashboard.html` (Bảng điều khiển Quản trị).
+     - Vai trò `student` $\rightarrow$ chuyển hướng tới `workspace.html` (Không gian làm việc Sinh viên).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as Người dùng
+    actor U as Người dùng
     participant C as Trình duyệt (Client)
-    participant S as Server (RP)
-    participant A as Authenticator
+    participant S as Máy chủ (RP Server)
+    participant A as Chip bảo mật (Authenticator)
 
-    alt Đăng nhập có username
-        U->>C: Nhập username, chọn Đăng nhập
+    alt Luồng 1: Nhập tên tài khoản (Username-first)
+        U->>C: Nhập username, bấm "Đăng Nhập"
         C->>S: POST /api/auth/login-options { username }
-    else Đăng nhập nhanh 1-chạm
-        U->>C: Bấm "Đăng nhập nhanh Passkey"
+        S-->>C: optionsJSON kèm danh sách allowCredentials
+    else Luồng 2: Đăng nhập nhanh 1-chạm (Usernameless)
+        U->>C: Bấm "Đăng nhập nhanh bằng Passkey"
         C->>S: POST /api/auth/login-options {}
+        S-->>C: optionsJSON với allowCredentials: [] (rỗng)
     end
-    S->>S: Tạo challenge ngẫu nhiên, lưu session
-    S-->>C: challenge, allowCredentials
-    C->>A: navigator.credentials.get()
-    A->>U: Yêu cầu vân tay / khuôn mặt / PIN
+
+    C->>A: navigator.credentials.get({ optionsJSON })
+    A->>U: Yêu cầu chạm vân tay / Face ID xác nhận
     U-->>A: Xác nhận thành công
-    A->>A: Ký điện tử trên challenge, tăng counter
-    A-->>C: assertion (chữ ký, counter, credentialID)
+    Note over A: Tăng bộ đếm counter (+1)<br/>Ký điện tử Challenge bằng Private Key
+    A-->>C: Trả về assertion (Chữ ký số, counter, credentialID)
     C->>S: POST /api/auth/login-verify { response }
-    S->>S: Kiểm tra chữ ký bằng publicKey, origin, counter
-    S->>S: Tái tạo session ID mới (chống fixation), gán role
-    S-->>C: Tạo session thành công, trả vai trò (Admin hoặc Sinh viên)
+    Note over S: 1. Hủy Challenge ngay lập tức trong Session<br/>2. Kiểm tra Public Key, Origin, RP ID, kiểm tra counter chống clone<br/>3. req.session.regenerate() cấp Session ID mới (Chống Session Fixation)<br/>4. Gán vai trò (role) từ Backend
+    S-->>C: HTTP 200 { verified: true, role: 'student' | 'admin' }
+    C->>C: Điều hướng: role='admin' -> dashboard.html, 'student' -> workspace.html
 ```
 
 ### 3.3. Luồng Step-Up khi sửa hồ sơ sinh viên
 
-Xác thực nâng cao gắn liền trực tiếp với Cookie phiên hiện tại:
-1. Server sinh challenge Step-Up và lưu `stepUpChallenge`, `stepUpChallengeTime` trong session (thời hạn sống 2 phút).
-2. Client gửi assertion chữ ký cùng dữ liệu hồ sơ mới trong cùng một request.
-3. Server xác minh chữ ký, hủy challenge ngay lập tức (chống replay), và cập nhật thông tin hồ sơ (chặn không cho phép sửa đổi MSSV). Cơ chế này không cần phát hành token rời.
+Nhằm phòng chống triệt để nguy cơ **Chiếm đoạt phiên làm việc (Session Hijacking)** hoặc rủi ro **Quên khóa máy nơi công cộng (Unattended Terminal)**, hệ thống áp dụng mô hình bảo mật **Zero-Trust** thông qua cơ chế **Xác thực tăng cường tại chỗ (Just-In-Time Step-Up Authentication)**:
+
+1. **Nguyên lý Zero-Trust:** Phiên đăng nhập Cookie hợp lệ (`loggedIn = true`) chỉ đủ quyền để *đọc* hồ sơ. Bất kỳ thao tác *chỉnh sửa dữ liệu nhạy cảm* nào đều bắt buộc người dùng phải quét lại vân tay/Face ID tươi (Freshness Verification) đúng thời điểm bấm nút lưu.
+2. **Khởi tạo thử thách Step-Up độc lập:** Khi sinh viên bấm *"Lưu thay đổi"* trên `workspace.html`, Client gọi `POST /api/user/profile/step-up-options` để xin một `stepUpChallenge` riêng (TTL 2 phút) gắn trực tiếp với Session hiện tại, cấu hình bắt buộc `userVerification: 'required'` và `allowCredentials` chỉ chứa các khóa của chính tài khoản đó.
+3. **Ký xác nhận & Gửi kèm payload:** Trình duyệt gọi WebAuthn API yêu cầu chạm lại cảm biến sinh trắc học. Sau khi quét thành công, Client gửi chữ ký tươi kèm dữ liệu cập nhật hồ sơ lên `POST /api/user/profile/step-up-update`.
+4. **Xác minh mật mã & Chống Mass Assignment (Bảo vệ MSSV bất biến):**
+   - Máy chủ hủy ngay `req.session.stepUpChallenge = null` (chống Replay Attack), kiểm tra TTL và xác minh chữ ký số ECDSA cùng cờ UV.
+   - **Bảo vệ toàn vẹn MSSV:** Áp dụng kỹ thuật Whitelist Destructuring tại tầng Backend, chỉ trích xuất đúng 4 trường được phép cập nhật (`fullName`, `dob`, `faculty`, `academicYear`). Trường Mã số sinh viên (`studentId`) bị loại bỏ hoàn toàn khỏi đối tượng ghi đĩa, bảo đảm MSSV luôn là hằng số bất biến do nhà trường quản lý.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as Sinh viên
-    participant C as Trình duyệt (Workspace)
-    participant S as Server (RP)
-    participant A as Authenticator
+    actor U as Sinh viên
+    participant C as Trình duyệt (workspace.html)
+    participant S as Máy chủ (RP Server)
+    participant A as Chip bảo mật (Authenticator)
 
-    U->>C: Chỉnh sửa thông tin cá nhân, bấm "Lưu thay đổi"
+    U->>C: Chỉnh sửa thông tin trong Modal, bấm "Lưu thay đổi"
     C->>S: POST /api/user/profile/step-up-options
-    S->>S: Tạo stepUpChallenge (TTL 2 phút), lưu session
-    S-->>C: PublicKeyCredentialRequestOptions (userVerification: required)
-    C->>A: navigator.credentials.get()
-    A->>U: Yêu cầu quét vân tay / Face ID
-    U-->>A: Xác nhận thành công
-    A-->>C: assertion signature
+    Note over S: Sinh stepUpChallenge riêng (TTL 2 phút)<br/>userVerification: 'required' (Bắt buộc sinh trắc học)
+    S-->>C: optionsJSON (chỉ chứa khóa Passkey của chính sinh viên)
+    C->>A: navigator.credentials.get({ optionsJSON })
+    A->>U: Bật popup yêu cầu quét lại vân tay / Face ID
+    U-->>A: Quét vân tay thành công
+    Note over A: Ký Challenge tạo chữ ký tươi (Freshness Signature)
+    A-->>C: Trả về assertion signature
     C->>S: POST /api/user/profile/step-up-update { response, profileData }
-    S->>S: Hủy challenge, kiểm tra TTL và xác minh chữ ký
-    S->>S: Cập nhật hồ sơ (bảo vệ MSSV bất biến)
-    S-->>C: { success: true, profile }
+    Note over S: 1. Hủy ngay stepUpChallenge (Chống Replay)<br/>2. Xác minh chữ ký số hợp lệ & cờ UV = true<br/>3. Whitelist: Chỉ cập nhật fullName, dob, faculty, academicYear<br/>4. Loại bỏ studentId (Bảo vệ MSSV bất biến)
+    S-->>C: HTTP 200 { success: true, profile } (Thông báo cập nhật thành công)
+    C->>C: Cập nhật giao diện thẻ sinh viên với dữ liệu mới
 ```
 
 ### 3.4. Lưu trữ dữ liệu và tính bền vững
